@@ -1,0 +1,104 @@
+# -*-coding=utf-8-*-
+
+"""
+构建一个简单势能面
+"""
+
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+import numpy as np
+
+
+class SimpleSurface():
+    def __init__(self):
+        self.n = 2  # 变量个数
+        self.delta = 0.001  # 计算梯度时使用
+        self.point = []
+        self.fig = None
+
+    def get_value(self, position):
+        """
+        计算函数
+        """
+        _x = position
+        # return np.sin(x1) + np.sin(x2) + 2
+        return np.sin(_x[0]) + np.sin(_x[1])
+
+    def get_diff(self, position):
+        """
+        计算一阶梯度
+        """
+        x = position
+        return np.array([np.cos(x[0]), np.cos(x[1])])
+
+    def get_hess(self, position):
+        """
+        Hessian矩阵
+        """
+        x = position
+        return np.array([[-np.sin(x[0]), 0], [0, -np.sin(x[1])]])
+
+    def show_surface_3d(self):
+        """
+        放在show_point后面
+        :return:
+        """
+        x_array = np.arange(-4, 4, 0.3)
+        y_array = np.arange(-4, 4, 0.3)
+        x, y = np.meshgrid(x_array, y_array)
+        # z = [self.get_value([x_, y_]) for x_, y_ in zip(x, y)]
+        z = self.get_value([x, y])
+        # self.ax.plot_surface(x, y, z, rstride=1, cstride=1, cmap=plt.get_cmap('rainbow'))
+        self.ax.scatter(x, y, z, c='r')
+        # ax.contourf(x, y, z, zdir='z', offset=2)
+        # plt.show()
+        return
+
+    def show_point_3d(self, x, y, z):
+        """
+        显示点
+        """
+        self.fig = plt.figure()
+        # ax = fig.add_subplot(111, projection='3d')
+        self.ax = Axes3D(self.fig)
+        self.ax.scatter(x, y, z)
+        self.ax.set_zlim(-4, 4)
+
+        return
+
+    def show_point_2d(self, x, color='r'):
+        plt.plot(x[:, 0], x[:, 1], color)
+        plt.annotate('start point', xy=(x[0, 0], x[0, 1]))
+        plt.annotate('end point', xy=(x[-1, 0], x[-1, 1]))
+
+    def show_surface_2d(self, x_min, x_max):
+        # 建立步长为0.01，即每隔0.01取一个点
+        step = 0.01
+        x = np.arange(x_min, x_max, step)
+        y = np.arange(x_min, x_max, step)
+        # 也可以用x = np.linspace(-10,10,100)表示从-10到10，分100份
+
+        # 将原始数据变成网格数据形式
+        X, Y = np.meshgrid(x, y)
+        # 写入函数，z是大写
+        Z = self.get_value((X, Y))
+        # 设置打开画布大小,长10，宽6
+        # plt.figure(figsize=(10,6))
+        # 填充颜色，f即filled
+        plt.contourf(X, Y, Z)
+        # 画等高线
+        plt.contour(X, Y, Z)
+
+        return
+
+    def show(self):
+        plt.show()
+
+
+if __name__ == "__main__":
+    ss = SimpleSurface()
+    x = [1, 1]
+    y = [1, 2]
+    z = [3, 3]
+    ss.show_surface_2d(-5, 5)
+    ss.show()
