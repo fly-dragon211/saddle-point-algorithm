@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# @File  : damp_newton.py
+# @File  : newton.py
 # @Author: Fly_dragon
 # @Date  : 2020/2/22
 # @Desc  :
@@ -144,7 +144,7 @@ class Newton:
             x_store.append(x0.copy())
 
         x_store = np.array(x_store)
-        return x0, x_store, k
+        return x_store, k
 
 
 if __name__ == '__main__':
@@ -154,7 +154,7 @@ if __name__ == '__main__':
         x0 = (np.pi/2, -np.pi/2) + (np.random.rand(2)-0.5)
         Qnewton = Newton(PES.get_value, PES.get_diff, x0)
         plt.figure(i+1)
-        x1, x_store, k = Qnewton.bfgs_newton(PES.get_hess)
+        x_store, k = Qnewton.bfgs_newton(PES.get_hess)
         PES.show_surface_2d(-5, 5)
         PES.show_point_2d(x_store)
         print('第%d次迭代次数%d' % (i+1, k))

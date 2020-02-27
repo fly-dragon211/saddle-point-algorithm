@@ -22,21 +22,21 @@ class SimpleSurface():
         """
         _x = position
         # return np.sin(x1) + np.sin(x2) + 2
-        return np.sin(_x[0]) + np.sin(_x[1])
+        return 5*(np.sin(_x[0]) + np.sin(_x[1]))
 
     def get_diff(self, position):
         """
         计算一阶梯度
         """
         x = position
-        return np.array([np.cos(x[0]), np.cos(x[1])])
+        return 5*np.array([np.cos(x[0]), np.cos(x[1])])
 
     def get_hess(self, position):
         """
         Hessian矩阵
         """
         x = position
-        return np.array([[-np.sin(x[0]), 0], [0, -np.sin(x[1])]])
+        return 5*np.array([[-np.sin(x[0]), 0], [0, -np.sin(x[1])]])
 
     def show_surface_3d(self):
         """
@@ -66,8 +66,9 @@ class SimpleSurface():
 
         return
 
-    def show_point_2d(self, x, color='r'):
+    def show_point_2d(self, x, color='ro'):
         plt.plot(x[:, 0], x[:, 1], color)
+        plt.plot(x[-1, 0], x[-1, 1], 'k*')
         plt.annotate('start point', xy=(x[0, 0], x[0, 1]))
         plt.annotate('end point', xy=(x[-1, 0], x[-1, 1]))
 

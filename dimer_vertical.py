@@ -16,7 +16,8 @@ import time
 
 
 class Dimer:
-    def __init__(self, n=2, ini_position=(np.pi/2, np.pi/2), ini_vector=np.random.rand(2)-0.5,
+    def __init__(self, n=2, ini_position=(np.pi/2, np.pi/2),
+                 ini_vector=np.random.rand(2)-0.5,
                  whether_print=False):
         # 是否打印中间数据
         self.whether_print = whether_print
@@ -48,13 +49,13 @@ class Dimer:
         # 给予一个初速度
         # self.v[:] = self.vector
         # dimer步进时间
-        self.timer = 0.006
+        self.timer = 0.06
         self.f1[:] = self.force(self.position+self.vector*self.r)
         self.f2[:] = self.force(self.position-self.vector*self.r)
         self.f_rota = 0  # 旋转力
         self.update_normal()
         self.angle = 0
-        self.position_list = [[], [], []]
+        self.position_list = []
 
     def get_value(self, position):
         """
@@ -77,7 +78,7 @@ class Dimer:
             # 负梯度为受力方向
             force_array[i] = (value-new_value) / self.delta
         return force_array
-        # return self.PES.get_force(position)
+        # return self.PES.get_diff(position)
 
     def vertical_force(self, force, vector):
         """
@@ -194,16 +195,13 @@ class Dimer:
         # 旋转到曲率最小
         # rotate_angle = np.pi / 180
         # self.position[:] = [np.random.random(), np.random.random()]
-        x = [self.position[0]]
-        y = [self.position[1]]
-        z = [self.get_value(self.position)]
         times = []
         for i in range(1200):
             for j in range(300):
                 rotate_angle = self.get_rotate_angle()
                 self.rotate(rotate_angle)
-                # print(rotate_angle)
-                print('rotated force: ', self.f_rota)
+                if self.whether_print:
+                    print('rotated force: ', self.f_rota)
                 # 垂直力大小
                 if np.linalg.norm(self.vertical_force(self.f1-self.f2, self.vector)) < self.min_vertical_force:
                     times.append(j)
@@ -213,10 +211,8 @@ class Dimer:
             # print(self.vector, 'angle', self.angle)
             self.translate()
             # print(self.c)
-            x.append(self.position[0])
-            y.append(self.position[1])
-            z.append(self.get_value(self.position))
-            if (np.abs(self.f1 + self.f2) < 0.1).all():
+            self.position_list.append(self.position.copy())
+            if (np.abs(self.f1 + self.f2) < 1).all():  # 所有方向都相反
                 if self.c < 0.0:
                     if self.whether_print:
                         print('step: ', i)
@@ -224,11 +220,11 @@ class Dimer:
         if self.whether_print:
             print('time', times)
             print(self.position/np.pi*180)
-        self.PES.show_point_2d(x[:20], y[:20])
-        # self.PES.show_surface_2d(-max(x) * 1.1, max(x) * 1.5)
-        self.PES.show_surface_2d(-5, 5)
-        self.PES.show()
-        return x, y
+        # self.PES.show_point_2d(np.array(self.position_list))
+        # self.PES.show_surface_2d(-5, 5)
+        # plt.title('It rotates %d times and run %d times' % (sum(times), len(times)))
+        # self.PES.show()
+        return np.array(self.position_list), times
 
     def update_c(self):
         """
@@ -246,8 +242,8 @@ class Dimer:
         normal_abs = np.linalg.norm(normal)
         if normal_abs < self.min_value:
             # 如果垂直力为0，中断计算垂直向量
-            # self.normal[:] = np.float('nan')
-            self.normal[:] = 0
+            self.normal[:] = np.float('nan')
+            # self.normal[:] = 0
         else:
             self.normal[:] = normal / normal_abs
 
@@ -255,63 +251,17 @@ class Dimer:
         self.f_rota = np.linalg.norm(self.f1 - self.f2 - np.dot(self.f1 - self.f2, self.vector) * self.vector)
         return
 
-def test():
-    # 正常收敛
-    x1 = []
-    y1 = []
-    # 非正常收敛
-    x2 = []
-    y2 = []
-    for i in range(60):
-        np.random.seed(i)
-        # plt.figure(i+1)
-        ini_vector = np.random.rand(2) - 0.5
-        ini_position = np.random.rand(2) * np.pi
-        plt.title('initial vector:' + str(ini_vector))
-        d = Dimer(2, ini_vector=ini_vector)
-        d.work()
-        print('curvature', d.c)
-        if d.c == -0.0:
-            x2.append(ini_vector[0])
-            y2.append(ini_vector[1])
-        else:
-            x1.append(ini_vector[0])
-            y1.append(ini_vector[1])
-    plt.scatter(x1, y1, c='r')
-    plt.scatter(x2, y2, c='b')
-    plt.title('the effect of different initial direction')
-    plt.show()
-    return
-
 
 if __name__ == "__main__":
     # test()
-    np.random.seed(5)
-    ini_vector = np.random.rand(2) - 0.5
-    ini_position = (0, -0.5)
-    angle = np.pi / 180 * 3
-    ini_vector = [np.cos(angle), np.sin(angle)]
-    d = Dimer(2, ini_vector=ini_vector, whether_print=True)
-    d.work()
+    np.random.seed(7)
+    for i in range(1, 15):
+        plt.figure(i)
+        ini_position = (np.random.rand(2) - 0.5) * 10
+        # angle = np.pi / 180 * 60
+        # ini_vector = [np.cos(angle), np.sin(angle)]
+        ini_vector = np.random.rand(2)
+        d = Dimer(2, ini_position, ini_vector, whether_print=False)
+        d.work()
 
-
-    # t = 100  # 等分成20份
-    # x = []
-    # y1 = []
-    # y2 = []
-    # for i in range(t):
-    #     angle = np.pi * 2 * i / t
-    #     ini_vector = [np.cos(angle), np.sin(angle)]
-    #     ini_position = [5, 15]
-    #     d = Dimer(2, ini_vector=ini_vector, ini_position=ini_position, whether_print=False)
-    #     d.update_normal()
-    #     d.update_c()
-    #     x.append(angle * 180 / np.pi)
-    #     y1.append(d.c)
-    #     y2.append(d.f_rota)
-    #     print('angle', angle * 180 / np.pi)
-    #     print('curvature', d.c, 'rotate force', d.f_rota)
-    # plt.plot(x, y2)
-    # plt.xlabel('angle')
-    # plt.ylabel('rotate force')
 
