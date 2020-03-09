@@ -21,22 +21,22 @@ class SimpleSurface():
         计算函数
         """
         _x = position
-        # return np.sin(x1) + np.sin(x2) + 2
-        return 5*(np.sin(_x[0]) + np.sin(_x[1]))
+        return np.sin(_x[0]) + np.sin(_x[1])
+        # return _x[0]**2 - _x[1]**2
 
     def get_diff(self, position):
         """
         计算一阶梯度
         """
         x = position
-        return 5*np.array([np.cos(x[0]), np.cos(x[1])])
+        return np.array([np.cos(x[0]), np.cos(x[1])])
 
     def get_hess(self, position):
         """
         Hessian矩阵
         """
         x = position
-        return 5*np.array([[-np.sin(x[0]), 0], [0, -np.sin(x[1])]])
+        return np.array([[-np.sin(x[0]), 0], [0, -np.sin(x[1])]])
 
     def show_surface_3d(self):
         """

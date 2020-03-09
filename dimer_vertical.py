@@ -41,7 +41,6 @@ class Dimer:
         self.vector = self.vector / np.linalg.norm(self.vector)
         # 曲率
         self.c = 0
-        self.update_c()
         self.delta = 0.001
         self.delta_angle = np.pi / 180
         # dimer速度
@@ -54,6 +53,7 @@ class Dimer:
         self.f2[:] = self.force(self.position-self.vector*self.r)
         self.f_rota = 0  # 旋转力
         self.update_normal()
+        self.update_c()
         self.angle = 0
         self.position_list = []
 
@@ -172,9 +172,10 @@ class Dimer:
         f_parallel = np.dot(self.vector, f_r) * self.vector
         # dimer指向鞍点力
         if self.c < 0:
-            f_to_saddle = f_r - f_parallel * 2
+            f_to_saddle = f_r - f_parallel * 2  # 平行力反向
         else:
             f_to_saddle = - f_parallel
+        # f_to_saddle = f_r - f_parallel * 2  这样会增加旋转，减少移动
         delta_v = f_to_saddle
         # delta_v = f_to_saddle * self.timer
         # 速度调整
@@ -197,23 +198,26 @@ class Dimer:
         # self.position[:] = [np.random.random(), np.random.random()]
         times = []
         for i in range(1200):
-            for j in range(300):
+            pre_c = self.c
+            for j in range(200):
                 rotate_angle = self.get_rotate_angle()
                 self.rotate(rotate_angle)
                 if self.whether_print:
                     print('rotated force: ', self.f_rota)
                 # 垂直力大小
                 if np.linalg.norm(self.vertical_force(self.f1-self.f2, self.vector)) < self.min_vertical_force:
+                    if self.c > pre_c:  # 如果曲率上升，旋转pi/2 + angle, 重要
+                        self.rotate(np.pi / 2)
+                        continue
                     times.append(j)
                     break
-                elif j == 299:
+                elif j == 199:
                     times.append(j)
-            # print(self.vector, 'angle', self.angle)
             self.translate()
-            # print(self.c)
+            # print('curvature:', self.c)
             self.position_list.append(self.position.copy())
             if (np.abs(self.f1 + self.f2) < 1).all():  # 所有方向都相反
-                if self.c < 0.0:
+                if self.c < 0.2:
                     if self.whether_print:
                         print('step: ', i)
                     break
@@ -232,7 +236,7 @@ class Dimer:
         """
         self.c = -np.dot(self.f1-self.f2, self.vector) / 2 / self.r
         if self.whether_print:
-            print(self.c)
+            print('curvature: ', self.c)
 
     def update_normal(self):
         """
@@ -252,16 +256,33 @@ class Dimer:
         return
 
 
-if __name__ == "__main__":
-    # test()
+def test_1():
     np.random.seed(7)
-    for i in range(1, 15):
+    for i in range(1, 7):
         plt.figure(i)
         ini_position = (np.random.rand(2) - 0.5) * 10
-        # angle = np.pi / 180 * 60
-        # ini_vector = [np.cos(angle), np.sin(angle)]
+        angle = np.pi / 180 * 3
+        ini_vector = [np.cos(angle), np.sin(angle)]
         ini_vector = np.random.rand(2)
-        d = Dimer(2, ini_position, ini_vector, whether_print=False)
-        d.work()
+        d = Dimer(2, ini_position, ini_vector, whether_print=True)
+        position_d, times_d = d.work()  # 得到dimer运行轨迹和每一次的旋转数
+        d.PES.show_point_2d(position_d)
+        d.PES.show_surface_2d(-5, 5)
+        plt.title('Dimer rotates %d times and run %d times \n '
+                  % (sum(times_d), len(times_d)))
 
+        x1 = d.position + d.vector * d.r
+        plt.plot(x1[0], x1[1], 'ko')  # 画出点1位置
+
+
+if __name__ == "__main__":
+    test_1()
+    # np.random.seed(7)
+    # for i in range(0, 7):
+    #     ini_position = (np.random.rand(2) - 0.5) * 10
+    #     angle = np.pi / 180 * 30*i
+    #     ini_vector = [np.cos(angle), np.sin(angle)]
+    #     # ini_vector = np.random.rand(2)
+    #     d = Dimer(2, ini_position, ini_vector, whether_print=False)
+    #     print('angle:', 30*i, 'rotate_force:', d.f_rota, 'curvature:%.3f' % d.c)
 

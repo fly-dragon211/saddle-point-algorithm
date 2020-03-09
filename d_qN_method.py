@@ -8,11 +8,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-from newton import  Newton
+from newton import Newton
 from dimer_vertical import Dimer
 from simplesurface import SimpleSurface
 
-if __name__ == '__main__':
+
+def test1():
     # the class of test surface
     PES = SimpleSurface()
     # dimer algorithm
@@ -20,13 +21,22 @@ if __name__ == '__main__':
     ini_vector = np.random.rand(2)
     d = Dimer(2, ini_position, ini_vector, whether_print=False)
     position_d, times_d = d.work()  # 得到dimer运行轨迹和每一次的旋转数
+    # print('vector', d.vector)
     # quasi newton method
     qN = Newton(PES.get_value, PES.get_diff, [position_d[-1, 0], position_d[-1, 1]])
     position_qN, times_qN = qN.bfgs_newton(PES.get_hess)
 
     position = np.concatenate((position_d, position_qN), axis=0)
     PES.show_point_2d(position)
+    plt.plot(position_d[-1, 0], position_d[-1, 1], 'ko')
     PES.show_surface_2d(-5, 5)
     plt.title('Dimer rotates %d times and run %d times \n '
               'Newton runs %d times' % (sum(times_d), len(times_d), times_qN))
     plt.show()
+
+
+if __name__ == '__main__':
+    np.random.seed(2)
+    for i in range(1, 7):
+        plt.figure(i)
+        test1()

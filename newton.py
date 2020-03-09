@@ -107,7 +107,7 @@ class Newton:
         n = len(x0)  # 变量个数
         maxk = 1e5  # 最大迭代次数
         epsilon = 1e-5
-        delta = 0.6  # 参数很重要，越大则单步可以搜索的范围越远(太小时收敛过慢)
+        delta = 0.55  # 参数很重要，越大则单步可以搜索的范围越远(太小时收敛过慢)
         sigma = 0.4
         k = 0
         x_store = [x0.copy()]
