@@ -137,7 +137,7 @@ class Newton:
                   delta_g.T.dot(delta_x)).dot(Bk).dot(np.eye(n) - delta_g.dot(delta_x.T)/delta_g.T.dot(delta_x)) +\
                 delta_x.dot(delta_x.T) / delta_g.T.dot(delta_x)
 
-            # # 测试Dk与hess(x0)差别
+            # 测试Dk与hess(x0)差别
             # print('The difference between B and H', np.sum(np.abs(Bk - hess(x0))))
             k += 1
             x0 = x1

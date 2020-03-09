@@ -31,9 +31,10 @@ class Dimer:
         self.vector = np.zeros(n, 'f')
         self.normal = np.zeros(n, 'f')
         self.position = np.zeros(n, 'f')
-        self.position[0] = ini_position[0]
-        self.position[1] = ini_position[1]
+        self.position[:] = ini_position[:]
+        self.position_pre = np.zeros(n, 'f')
         self.f1 = np.zeros(n, 'f')
+        self.f_r = np.zeros(n, 'f')  # the force of midpoint
         self.f2 = np.zeros(n, 'f')
         self.vector[:] = ini_vector
         # 向量归一化
@@ -49,8 +50,7 @@ class Dimer:
         # self.v[:] = self.vector
         # dimer步进时间
         self.timer = 0.06
-        self.f1[:] = self.force(self.position+self.vector*self.r)
-        self.f2[:] = self.force(self.position-self.vector*self.r)
+        self.update_f()  # 更新受力
         self.f_rota = 0  # 旋转力
         self.update_normal()
         self.update_c()
@@ -97,8 +97,6 @@ class Dimer:
         """
         计算dimer的旋转角
         """
-        self.f1 = self.force(self.position+self.vector*self.r)
-        self.f2 = self.force(self.position-self.vector*self.r)
         # 旋转力
         delta_f = (self.f1-self.f2) - np.dot(np.dot(self.f1-self.f2, self.vector), self.vector)
         f_abs = np.linalg.norm(delta_f)
@@ -122,8 +120,7 @@ class Dimer:
         """
         计算dimer的旋转角
         """
-        self.f1 = self.force(self.position+self.vector*self.r)
-        self.f2 = self.force(self.position-self.vector*self.r)
+        self.update_f()
         delta_f = (self.f1-self.f2) - np.dot(np.dot(self.f1-self.f2, self.vector), self.vector)
         # 力大小
         f_abs = np.linalg.norm(delta_f)
@@ -156,8 +153,8 @@ class Dimer:
             return
         new_vector = self.vector*np.cos(self.angle) + self.normal*np.sin(self.angle)
         self.vector[:] = new_vector / np.linalg.norm(new_vector)
-        self.f1 = self.force(self.position+self.vector*self.r)
-        self.f2 = self.force(self.position-self.vector*self.r)
+        # 更新受力
+        self.update_f()
         # 计算曲率
         self.update_c()
 
@@ -167,7 +164,7 @@ class Dimer:
         """
         self.angle = 0
         # dimer合力
-        f_r = (self.f1 + self.f2) / 2
+        f_r = self.f_r
         # dimer平行力
         f_parallel = np.dot(self.vector, f_r) * self.vector
         # dimer指向鞍点力
@@ -189,13 +186,10 @@ class Dimer:
                 self.v = delta_v * (1+np.dot(delta_v, self.v)/np.dot(delta_v, delta_v))
         self.position += (self.v * self.timer)
         # 计算新点相关数据
-        self.f1[:] = self.force(self.position+self.vector*self.r)
-        self.f2[:] = self.force(self.position-self.vector*self.r)
+        self.update_f()
 
     def work(self):
         # 旋转到曲率最小
-        # rotate_angle = np.pi / 180
-        # self.position[:] = [np.random.random(), np.random.random()]
         times = []
         for i in range(1200):
             pre_c = self.c
@@ -214,7 +208,6 @@ class Dimer:
                 elif j == 199:
                     times.append(j)
             self.translate()
-            # print('curvature:', self.c)
             self.position_list.append(self.position.copy())
             if (np.abs(self.f1 + self.f2) < 1).all():  # 所有方向都相反
                 if self.c < 0.2:
@@ -254,6 +247,21 @@ class Dimer:
         # 旋转力
         self.f_rota = np.linalg.norm(self.f1 - self.f2 - np.dot(self.f1 - self.f2, self.vector) * self.vector)
         return
+
+    def update_f(self):
+        """
+        更新受力，利用像点是否移动进行效率优化
+        """
+        if (self.position == self.position_pre).all():  # 没有移动
+            self.f1[:] = self.force(self.position + self.vector * self.r)
+            self.f2[:] = 2 * self.f_r - self.f1
+        else:
+            self.f1[:] = self.force(self.position + self.vector * self.r)
+            self.f_r[:] = self.force(self.position)
+            self.f2[:] = 2 * self.f_r - self.f1
+            self.position_pre[:] = self.position[:]
+        return
+
 
 
 def test_1():
