@@ -6,6 +6,7 @@
 # @Desc  :
 """
 本改动是建立于dimer在超球面上旋转
+加入hessian矩阵计算
 """
 
 import numpy as np
@@ -23,7 +24,6 @@ class Dimer:
         self.whether_print = whether_print
         # 旋转力收敛值
         self.min_vertical_force = 1e-4
-
         self.min_value = 1e-20
         self.PES = SimpleSurface()
         self.n = n
@@ -55,6 +55,7 @@ class Dimer:
         self.update_normal()
         self.update_c()
         self.angle = 0
+        self.bk = np.eye(n)  # Hessian矩阵
         self.position_list = []
 
     def get_value(self, position):
@@ -162,6 +163,10 @@ class Dimer:
         """
         移动dimer
         """
+        # 为_update_bk准备
+        position_previous = self.position.copy()
+        force_previous = self.f_r.copy()
+
         self.angle = 0
         # dimer合力
         f_r = self.f_r
@@ -187,6 +192,8 @@ class Dimer:
         self.position += (self.v * self.timer)
         # 计算新点相关数据
         self.update_f()
+        # 更新Hessian矩阵
+        self._update_bk(position_previous, force_previous)
 
     def work(self):
         # 旋转到曲率最小
@@ -209,8 +216,8 @@ class Dimer:
                     times.append(j)
             self.translate()
             self.position_list.append(self.position.copy())
-            if (np.abs(self.f1 + self.f2) < 1).all():  # 所有方向都相反
-                if self.c < 0.2:
+            if (np.abs(self.f1 + self.f2) < 0.1).all():  # 所有方向都相反
+                if self.c < 0.0:
                     if self.whether_print:
                         print('step: ', i)
                     break
@@ -262,6 +269,22 @@ class Dimer:
             self.position_pre[:] = self.position[:]
         return
 
+    def _update_bk(self, position_previous, force_previous):
+        """
+        BFGS更新Hessian矩阵
+        """
+        x0 = position_previous
+        x1 = self.position
+        f0 = force_previous
+        f1 = self.f_r
+        # BFGS校正
+        delta_x = (x1 - x0).reshape((-1, 1))
+        delta_f = (f1 - f0).reshape((-1, 1))
+        # if delta_g.T.dot(delta_x) > 0:  # 如果该方向梯度增加，则更新拟Hessian矩阵B
+        self.bk = (np.eye(self.n) - delta_x.dot(delta_f.T) /
+              delta_f.T.dot(delta_x)).dot(self.bk).dot(np.eye(self.n) -
+              delta_f.dot(delta_x.T) / delta_f.T.dot(delta_x)) + \
+              delta_x.dot(delta_x.T) / delta_f.T.dot(delta_x)
 
 
 def test_1():
@@ -272,7 +295,7 @@ def test_1():
         angle = np.pi / 180 * 3
         ini_vector = [np.cos(angle), np.sin(angle)]
         ini_vector = np.random.rand(2)
-        d = Dimer(2, ini_position, ini_vector, whether_print=True)
+        d = Dimer(2, ini_position, ini_vector, whether_print=False)
         position_d, times_d = d.work()  # 得到dimer运行轨迹和每一次的旋转数
         d.PES.show_point_2d(position_d)
         d.PES.show_surface_2d(-5, 5)
@@ -281,6 +304,10 @@ def test_1():
 
         x1 = d.position + d.vector * d.r
         plt.plot(x1[0], x1[1], 'ko')  # 画出点1位置
+        # 测试Bk与hess(x0)差别
+        print('The difference between B and H', np.sum(np.abs(np.linalg.inv(d.bk) - d.PES.get_hess(d.position))))
+        print('The difference between I_n and H', np.sum(np.abs(np.eye(d.n) - d.PES.get_hess(d.position))))
+        print('\n')
 
 
 if __name__ == "__main__":
