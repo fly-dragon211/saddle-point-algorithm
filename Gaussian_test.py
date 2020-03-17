@@ -41,19 +41,30 @@ class GaussianFile:
                                    '0 1\n']
         self.file_head_noforce1 = ['%mem=500MB\n', '%nprocshared=4\n', '# B3LYP/6-31G(d) sp\n',
                           '\n', 'title\n', '\n', '0 1\n']
+        self.file_head_hess = ['%mem=500MB\n',
+                                   '%nprocshared=4\n',
+                                   '#p freq pm6\n',
+                                   '\n',
+                                   'title\n',
+                                   '\n',
+                                   '0 1\n']
 
         self.file_rear = ['\n1 3 1.0 4 1.0 5 1.0\n', '2\n', '3\n', '4\n', '5\n']
 
-    def generate_input(self, file_path, coordinates, elements, force=False):
+    def generate_input(self, file_path, coordinates, elements, cal_type=0):
         """
         生成输入文件
+        cal_type: 0 计算势能，1 计算受力(梯度)，2 计算Hessian矩阵
         """
         with open(file_path, 'w+') as f:
-            if force:
+            if cal_type == 1:
                 for line in self.file_head:
                     f.writelines(line)
-            else:
+            elif cal_type == 0:
                 for line in self.file_head_noforce:
+                    f.writelines(line)
+            elif cal_type == 2:
+                for line in self.file_head_hess:
                     f.writelines(line)
             for i in range(len(coordinates)):
                 f.writelines(' '+elements[i]+'  '+'%.8f' % coordinates[i][0]+'  '
@@ -121,7 +132,7 @@ class GaussianFile:
                 forces.extend(r)
             return forces
 
-        self.generate_input('cache.gjf', coordinates, self.elements, force=True)
+        self.generate_input('cache.gjf', coordinates, self.elements, cal_type=1)
         self.run_gaussian('cache.gjf')
         # 读取第一个forces
         with open('cache.out', 'r', encoding='utf-8') as f:
@@ -134,6 +145,62 @@ class GaussianFile:
                     forces.extend(_store_forces(f))
                     break
             return np.array(forces, 'f')
+
+    def get_hess(self, positions):
+        """
+        得到hessian矩阵
+        :param positions:  1 * x 矩阵
+        :return:
+        """
+        coordinates = positions.reshape((-1, 3))
+
+        def store_hessian(f):
+            p = re.compile(r'-?\d\.\d{6}D[+-]\d\d')
+            forces = []
+            while True:
+                line = f.readline()
+                #         print(line)
+                if re.search(r'Leave Link', line) or (not line):  # 这里要注意负号也为'-'
+                    break
+                r = p.findall(line)
+                forces.extend(r)
+            return forces
+
+        def vector_to_hess(vector, n):
+            # 把高斯中读取的vector转换成Hessian，注意有坑
+            hessian = np.zeros((n, n), 'f')
+            num_iterate = 0
+            for i in range(0, n, 5):
+                for L in range(i, n):
+                    for R in range(i, i + 5):
+                        if R > L or R >= n:
+                            break
+                        hessian[L, R] = vector[num_iterate]
+                        num_iterate += 1
+            return hessian
+
+        self.generate_input('cache.gjf', coordinates, self.elements, cal_type=2)
+        self.run_gaussian('cache.gjf')
+
+        # 读取第一个Hessian
+        n = positions.size
+        with open('cache.out', 'r', encoding='utf-8') as f:
+            vector_h = []
+            while True:
+                line = f.readline()
+                #         print(line)
+                if not line:
+                    break
+                if re.search(r'Forces', line):
+                    vector_h.extend(store_hessian(f))
+                    break
+            for i in range(len(vector_h)):  # 把字符串里的D替代成E
+                vector_h[i] = float(vector_h[i].replace('D', 'E'))
+            # 对向量进行重组
+            hessian = vector_to_hess(vector_h, n)
+            hessian += hessian.T - np.diag(hessian.diagonal())  # 转换成对称矩阵
+
+        return hessian
 
     @staticmethod
     def run_gaussian(input_file):
@@ -207,7 +274,7 @@ class DimerGaussian(Dimer):
             self.PES.generate_input('test' + str(i) + '.gjf', self.position.reshape((-1, 3)),
                                     self.PES.elements)
 
-            if (np.abs(self.f1 + self.f2) < 0.5).all():  # 所有方向都相反
+            if (np.abs(self.f_r) < 0.5).all():  # 所有方向都相反
                 if self.c < 0.0:
                     if self.whether_print:
                         print('step: ', i)
@@ -226,11 +293,11 @@ class DimerGaussian(Dimer):
 
 
 if __name__ == '__main__':
-    path = r'D:\graduate_project\transition_state\dimer_test_CCL'
+    path = r'D:\graduate_project\transition_state\dimer_test_co2'
     os.chdir(path)
     g = GaussianFile()
-    ini_position = g.gjf_read(r'CCL.gjf').reshape((1, -1))
-
+    ini_position = g.gjf_read(r'co2.gjf').reshape((1, -1))
+    # hess = g.get_hess(ini_position)
     np.random.seed(2)
     d = DimerGaussian(g, ini_position.size, ini_position=ini_position)
     d.work()

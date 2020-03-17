@@ -205,7 +205,7 @@ class Dimer:
                     times.append(j)
             self.translate()
             self.position_list.append(self.position.copy())
-            if (np.abs(self.f1 + self.f2) < 1).all():  # 所有方向都相反
+            if (np.abs(self.f_r) < 1).all():  # 所有方向都相反
                 if self.c < 0.2:
                     if self.whether_print:
                         print('step: ', i)
