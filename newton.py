@@ -98,7 +98,7 @@ class Newton:
         x_store = np.array(x_store)
         return x0, x_store, k
 
-    def bfgs_newton(self, hess='None'):
+    def bfgs_newton(self, hess_fun=None):
         # 用BFGS拟牛顿法求解无约束问题，用B代表B^-1
         # x0是初始点，fun，gfun和hess分别是目标函数值，梯度，海森矩阵的函数(可不写)
         fun = self.fun
@@ -112,19 +112,20 @@ class Newton:
         k = 0
         x_store = [x0.copy()]
         # 初始B
-        if type(hess) == str:
+        if hess_fun is None:
             Bk = np.linalg.inv(np.eye(n))
         else:
-            Bk = np.linalg.inv(hess(x0))
+            Bk = np.linalg.inv(hess_fun(x0))
         # 在牛顿方向dk做一维搜索
         while k < maxk:
+            fx0 = fun(x0)
             gk = gfun(x0)
             if np.linalg.norm(gk) <= epsilon:
                 break
             dk = -np.dot(Bk, gk)
             m = 0
             while m < 20:
-                if fun(x0 + sigma**m * dk) <= fun(x0) + delta * sigma**m * np.dot(gk, dk):
+                if fun(x0 + sigma**m * dk) <= fx0 + delta * sigma**m * np.dot(gk, dk):
                     break
                 m += 1
             alpha = sigma**m

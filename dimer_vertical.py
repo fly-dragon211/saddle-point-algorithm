@@ -17,7 +17,7 @@ import time
 
 class Dimer:
     def __init__(self, PES, n=2, ini_position=None,
-                 ini_vector=None,ini_velocity=None,
+                 ini_vector=None, ini_velocity=None,
                  whether_print=False):
         # 是否打印中间数据
         self.whether_print = whether_print
@@ -34,6 +34,7 @@ class Dimer:
         self.f1 = np.zeros(n, 'f')
         self.f_r = np.zeros(n, 'f')  # the force of midpoint
         self.f2 = np.zeros(n, 'f')
+        self.f_vertical = np.zeros(n, 'f')  # 旋转力
         self.v = np.zeros(n, 'f')  # dimer初速度
         # 更新预设
         self.vector[:] = ini_vector if ini_vector is not None else np.random.rand(n)-0.5
@@ -48,7 +49,6 @@ class Dimer:
         self.delta_angle = np.pi / 180
         # dimer步进时间
         self.timer = 0.06
-        self.f_rota = 0  # 旋转力
         self.angle = 0
         self.position_list = []
 
@@ -92,13 +92,13 @@ class Dimer:
         """
         计算dimer的旋转角
         """
+        self._update_normal()
         # 旋转力
-        delta_f = (self.f1-self.f2) - np.dot(np.dot(self.f1-self.f2, self.vector), self.vector)
+        delta_f = self.f_vertical
         f_abs = np.linalg.norm(delta_f)
         if f_abs < self.min_value:
             return 0
         # 垂直向量判断
-        self._update_normal()
         if np.isnan(self.normal[0]):
             return 0
         # 这里是单位向量
@@ -193,7 +193,7 @@ class Dimer:
                 rotate_angle = self.get_rotate_angle()
                 self.rotate(rotate_angle)
                 if self.whether_print:
-                    print('rotated force: ', self.f_rota)
+                    print('rotated force: ', np.linalg.norm(self.f_vertical))
                 # 垂直力大小
                 if np.linalg.norm(self.vertical_force(self.f1-self.f2, self.vector)) < self.min_vertical_force:
                     if self.c > pre_c:  # 如果曲率上升，旋转pi/2 + angle, 重要
@@ -205,8 +205,8 @@ class Dimer:
                     times.append(j)
             self.translate()
             self.position_list.append(self.position.copy())
-            if (np.abs(self.f_r) < 1).all():  # 所有方向都相反
-                if self.c < 0.2:
+            if (np.abs(self.f_r) < 0.3).all():  # 所有方向都相反
+                if self.c < 0.0:
                     if self.whether_print:
                         print('step: ', i)
                     break
@@ -241,7 +241,7 @@ class Dimer:
             self.normal[:] = normal / normal_abs
 
         # 旋转力
-        self.f_rota = np.linalg.norm(self.f1 - self.f2 - np.dot(self.f1 - self.f2, self.vector) * self.vector)
+        self.f_vertical = self.f1 - self.f2 - np.dot(np.dot(self.f1 - self.f2, self.vector), self.vector)
         return
 
     def _update_f(self):

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-# @File  : Gaussian_test.py
+# @File  : Gaussian_class.py
 # @Author: Fly_dragon
 # @Date  : 2020/3/10
 # @Desc  : 修改后结合高斯程序的dimer算法
@@ -12,6 +12,7 @@ import os
 import re
 
 from dimer_vertical import Dimer
+from newton import Newton
 
 
 class GaussianFile:
@@ -133,6 +134,7 @@ class GaussianFile:
             return forces
 
         self.generate_input('cache.gjf', coordinates, self.elements, cal_type=1)
+        print('run gaussian to get force')
         self.run_gaussian('cache.gjf')
         # 读取第一个forces
         with open('cache.out', 'r', encoding='utf-8') as f:
@@ -180,6 +182,7 @@ class GaussianFile:
             return hessian
 
         self.generate_input('cache.gjf', coordinates, self.elements, cal_type=2)
+        print('run gaussian to get hess')
         self.run_gaussian('cache.gjf')
 
         # 读取第一个Hessian
@@ -207,7 +210,6 @@ class GaussianFile:
         """
         计算
         """
-        print('running gaussian: ', input_file)
         os.system('g09 '+input_file)
         print('done')
 
@@ -219,6 +221,7 @@ class GaussianFile:
         """
         coordinates = positions.reshape((-1, 3))
         self.generate_input('cache.gjf', coordinates, self.elements)
+        print('run gaussian to get value')
         self.run_gaussian('cache.gjf')
         energy = self._get_scf('cache.out')
         return energy
@@ -258,7 +261,7 @@ class DimerGaussian(Dimer):
                 rotate_angle = self.get_rotate_angle()
                 self.rotate(rotate_angle)
                 if self.whether_print:
-                    print('rotated force: ', self.f_rota)
+                    print('rotated force: ', np.linalg.norm(self.f_vertical))
                 self.store_information()  # 存储dimer信息
                 # 垂直力大小
                 if np.linalg.norm(self.vertical_force(self.f1 - self.f2, self.vector)) < self.min_vertical_force:
@@ -271,25 +274,84 @@ class DimerGaussian(Dimer):
                     times.append(j)
             self.translate()
             # 把移动后的分子存储起来
-            self.PES.generate_input('test' + str(i) + '.gjf', self.position.reshape((-1, 3)),
+            self.PES.generate_input('test_dimer' + str(i) + '.gjf', self.position.reshape((-1, 3)),
                                     self.PES.elements)
 
             if (np.abs(self.f_r) < 0.5).all():  # 所有方向都相反
-                if self.c < 0.0:
+                if self.c < 0.2:
                     if self.whether_print:
                         print('step: ', i)
                     break
         if self.whether_print:
             print('time', times)
             print(self.position / np.pi * 180)
-        return
+        return times
 
     def store_information(self):
         # 存储dimer信息到 information.txt
-        with open('information.txt', 'a+') as f:
-            f.write('rotated force: ' + str(self.f_rota)
+        with open('information_dimer.txt', 'a+') as f:
+            f.write('rotated force: ' + str(np.linalg.norm(self.f_vertical))
                     + 'vector: ' + str(self.vector) + '\n')
             f.write('curvature: ' + str(self.c))
+
+
+class NewtonGaussian(Newton):
+    def __init__(self, PES, ini_position):
+        super().__init__(PES.get_value, PES.get_force, ini_position)
+        self.PES = PES
+
+    def bfgs_newton(self, hess_fun='None'):
+        # 用BFGS拟牛顿法求解无约束问题，用B代表B^-1
+        # x0是初始点，fun，gfun和hess分别是目标函数值，梯度，海森矩阵的函数(可不写)
+        fun = self.fun
+        gfun = self.gfun
+        x0 = self.x0
+        n = len(x0)  # 变量个数
+        maxk = 1e5  # 最大迭代次数
+        epsilon = 1e-4
+        delta = 0.6  # 参数很重要，越大则单步可以搜索的范围越远(太小时收敛过慢)
+        sigma = 0.4
+        k = 0
+        # 初始B
+        if type(hess_fun) == str:
+            Bk = np.linalg.inv(np.eye(n))
+        else:
+            Bk = np.linalg.inv(hess_fun(x0))
+        # 在牛顿方向dk做一维搜索
+        while k < maxk:
+            gk = gfun(x0) if k == 0 else gkx1  # 后面计算过gfun(x0)，减少一次计算
+            fx0 = fun(x0)
+            if np.linalg.norm(gk) <= epsilon:
+                break
+            dk = -np.dot(Bk, gk)
+            m = 0
+            while m < 20:
+                if fun(x0 + sigma**m * dk) <= fx0 + delta * sigma**m * np.dot(gk, dk):
+                    break
+                m += 1
+            alpha = sigma**m
+            x1 = x0 + alpha * dk
+            # BFGS校正
+            gkx1 = gfun(x1)
+            delta_x = (x1 - x0).reshape((-1, 1))
+            delta_g = (gkx1 - gk).reshape((-1, 1))
+            # if delta_g.T.dot(delta_x) > 0:  # 如果该方向梯度增加，则更新拟Hessian矩阵B
+            Bk = (np.eye(n) - delta_x.dot(delta_g.T) /
+                  delta_g.T.dot(delta_x)).dot(Bk).dot(np.eye(n) - delta_g.dot(delta_x.T)/delta_g.T.dot(delta_x)) +\
+                delta_x.dot(delta_x.T) / delta_g.T.dot(delta_x)
+
+            # 测试Dk与hess(x0)差别
+            # print('The difference between B and H', np.sum(np.abs(Bk - hess(x0))))
+            k += 1
+            x0 = x1
+            # 把移动后的分子存储起来
+            self.PES.generate_input('test_bfgs' + str(k) + '.gjf', x0.reshape((-1, 3)),
+                                    self.PES.elements)
+            # 存储信息到 information.txt
+            with open('information_bfgs.txt', 'a+') as f:
+                f.write('iterate_num: ' + str(k) + 'force: ' + str(np.linalg.norm(gk)))
+
+        return k
 
 
 if __name__ == '__main__':
@@ -297,7 +359,10 @@ if __name__ == '__main__':
     os.chdir(path)
     g = GaussianFile()
     ini_position = g.gjf_read(r'co2.gjf').reshape((1, -1))
-    # hess = g.get_hess(ini_position)
     np.random.seed(2)
-    d = DimerGaussian(g, ini_position.size, ini_position=ini_position)
-    d.work()
+    # bfgs algorithm
+    Ne_bfgs = NewtonGaussian(g, ini_position)
+    Ne_bfgs.bfgs_newton(hess_fun=g.get_hess)
+
+    # d = DimerGaussian(g, ini_position.size, ini_position=ini_position)
+    # d.work()
