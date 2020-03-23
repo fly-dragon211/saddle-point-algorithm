@@ -272,7 +272,7 @@ class DimerGaussian(Dimer):
                     break
                 elif j == 199:
                     times.append(j)
-            self.translate()
+            self.translate_v1()
             # 把移动后的分子存储起来
             self.PES.generate_input('test_dimer' + str(i) + '.gjf', self.position.reshape((-1, 3)),
                                     self.PES.elements)

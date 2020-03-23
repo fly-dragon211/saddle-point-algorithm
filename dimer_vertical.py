@@ -48,7 +48,8 @@ class Dimer:
         self.delta = 0.001
         self.delta_angle = np.pi / 180
         # dimer步进时间
-        self.timer = 0.06
+        self.timer = 0.16
+        self.bk = np.eye(n)  # Hessian矩阵近似
         self.angle = 0
         self.position_list = []
 
@@ -153,9 +154,9 @@ class Dimer:
         # 计算曲率
         self._update_c()
 
-    def translate(self):
+    def translate_v1(self):
         """
-        移动dimer
+        移动dimer, 梯度下降法
         """
         self.angle = 0
         # dimer合力
@@ -169,7 +170,6 @@ class Dimer:
             f_to_saddle = - f_parallel
         # f_to_saddle = f_r - f_parallel * 2  这样会增加旋转，减少移动
         delta_v = f_to_saddle
-        # delta_v = f_to_saddle * self.timer
         # 速度调整
         if np.dot(self.v, f_to_saddle) < 0:
             self.v = delta_v
@@ -179,6 +179,55 @@ class Dimer:
                 self.v[:] = 0
             else:
                 self.v = delta_v * (1+np.dot(delta_v, self.v)/np.dot(delta_v, delta_v))
+        self.position += (self.v * self.timer)
+        # 计算新点相关数据
+        self._update_f()
+
+    def translate_v2(self):
+        """
+        移动dimer, BFGS法，不太对
+        """
+        self.angle = 0
+        # dimer合力
+        f_r = self.f_r
+        # dimer平行力
+        f_parallel = np.dot(self.vector, f_r) * self.vector
+        # dimer指向鞍点力
+        if self.c < 0:
+            f_to_saddle = f_r - f_parallel * 2  # 平行力反向
+        else:
+            f_to_saddle = - f_parallel
+        delta_v = f_to_saddle.reshape((-1, 1))
+
+        position_pre = self.position.copy()
+        force_pre = self.f_r.copy()
+        self.position += np.linalg.norm(self.bk.dot(delta_v).flatten())*delta_v.flatten()*self.timer
+        # 计算新点相关数据
+        self._update_f()
+        self._update_bk(position_pre, force_pre)
+
+    def translate_v3(self):
+        """
+        移动dimer, 线性探测法
+        """
+        self.angle = 0
+        # dimer合力
+        f_r = self.f_r
+        # dimer平行力
+        f_parallel = np.dot(self.vector, f_r) * self.vector
+        # dimer指向鞍点力
+        if self.c < 0:
+            f_to_saddle = f_r - f_parallel * 2  # 平行力反向
+            # 一维线性搜索，步长调整
+            m = 0
+            while m < 4:
+                if np.linalg.norm(self.f_r) > np.linalg.norm(self.force(self.position + f_to_saddle * 0.5 ** m)):
+                    break
+                m += 1
+            self.timer = 0.5 ** m
+        else:
+            f_to_saddle = - f_parallel
+        self.v = f_to_saddle
         self.position += (self.v * self.timer)
         # 计算新点相关数据
         self._update_f()
@@ -203,12 +252,10 @@ class Dimer:
                     break
                 elif j == 199:
                     times.append(j)
-            self.translate()
+            self.translate_v3()
             self.position_list.append(self.position.copy())
             if (np.abs(self.f_r) < 0.3).all():  # 所有方向都相反
                 if self.c < 0.0:
-                    if self.whether_print:
-                        print('step: ', i)
                     break
         if self.whether_print:
             print('time', times)
@@ -257,6 +304,23 @@ class Dimer:
             self.f2[:] = 2 * self.f_r - self.f1
             self.position_pre[:] = self.position[:]
         return
+
+    def _update_bk(self, position_previous, force_previous):
+        """
+        BFGS更新Hessian矩阵
+        """
+        x0 = position_previous
+        x1 = self.position
+        f0 = force_previous
+        f1 = self.f_r
+        # BFGS校正
+        delta_x = (x1 - x0).reshape((-1, 1))
+        delta_f = (f1 - f0).reshape((-1, 1))
+        # if delta_g.T.dot(delta_x) > 0:  # 如果该方向梯度增加，则更新拟Hessian矩阵B
+        self.bk = (np.eye(self.n) - delta_x.dot(delta_f.T) /
+              delta_f.T.dot(delta_x)).dot(self.bk).dot(np.eye(self.n) -
+              delta_f.dot(delta_x.T) / delta_f.T.dot(delta_x)) + \
+              delta_x.dot(delta_x.T) / delta_f.T.dot(delta_x)
 
     def _update_all(self):
         self._update_f()  # 更新受力
