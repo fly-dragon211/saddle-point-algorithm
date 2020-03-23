@@ -218,7 +218,19 @@ class Dimer:
         # dimer指向鞍点力
         if self.c < 0:
             f_to_saddle = f_r - f_parallel * 2  # 平行力反向
-            if np.linalg.norm(self.f_r) < 0.5:
+            if np.linalg.norm(self.force(self.position - f_to_saddle*0.01)) < np.linalg.norm(self.f_r):
+                # 后面是极值，需要跳出
+                m = 2
+                value_list = [self.get_value(self.position), self.get_value(self.position + f_to_saddle*0.1)]
+                while m < 10:
+                    value_1 = self.get_value(self.position + f_to_saddle*(0.1*m))
+                    if (value_list[-1] - value_list[-2]) * (value_1 - value_list[-1]) <= 0:
+                        break
+                    value_list.append(value_1)
+                    m += 1
+                self.timer = 0.1*m
+
+            elif np.linalg.norm(self.f_r) < 0.9:
                 # 鞍点附近, 一维线性搜索，步长调整
                 m = 0
                 m_max = 4
@@ -230,8 +242,8 @@ class Dimer:
                     m += 1
                 self.timer = 0.5 ** m
             else:
-                # 极小值附近，一维搜索取值较大的的点
                 self.timer = 0.16
+                f_to_saddle = f_to_saddle * (1 + np.dot(f_to_saddle, self.v) / np.dot(f_to_saddle, f_to_saddle))
 
         else:
             f_to_saddle = - f_parallel
@@ -270,7 +282,7 @@ class Dimer:
                     break
                 elif j == 199:
                     times.append(j)
-            self.translate_v3()
+            self.translate_v1()
             if self.whether_print:
                 print('parallel force', np.dot(self.vector, self.f_r) * self.vector,
                       'verticle force', '\n')
@@ -311,7 +323,7 @@ class Dimer:
                     break
                 elif j == 199:
                     times.append(j)
-            self.translate_v2()
+            self.translate_v3()
             if self.whether_print:
                 print('parallel force', np.dot(self.vector, self.f_r) * self.vector,
                       'verticle force', '\n')
@@ -443,5 +455,5 @@ def test_extreme():
         # plt.plot(f_r_list)
 
 if __name__ == "__main__":
-    test_extreme()
+    test_1()
 
