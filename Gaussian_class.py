@@ -20,6 +20,7 @@ class GaussianFile:
     gaussian文件处理
     """
     def __init__(self):
+        self.cal_num = [0, 0]  # the number of energy and gradient
         self.elements = []
         # out文件，Force比较复杂代码在下面
         self.pattern_spe = re.compile(r'SCF Done:  E\(.+?\) =(.+?)A.U')
@@ -146,6 +147,7 @@ class GaussianFile:
                 if re.search(r'Forces', line):
                     forces.extend(_store_forces(f))
                     break
+            self.cal_num[1] += 1
             return np.array(forces, 'f')
 
     def get_hess(self, positions):
@@ -224,6 +226,7 @@ class GaussianFile:
         print('run gaussian to get value')
         self.run_gaussian('cache.gjf')
         energy = self._get_scf('cache.out')
+        self.cal_num[0] += 1
         return energy
 
 

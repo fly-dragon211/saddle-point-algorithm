@@ -21,15 +21,17 @@ class SimpleSurface():
         计算函数
         """
         _x = position
-        return np.sin(_x[0]) + np.sin(_x[1])
-        # return _x[0]**2 - _x[1]**2
+        # return np.sin(_x[0]) + np.sin(_x[1])
+        return _x[0]**4 + 4*_x[0]**2*_x[1]**2 - 2*_x[0]**2 + 2*_x[1]**2
 
     def get_diff(self, position):
         """
         计算一阶梯度
         """
         x = position
-        return np.array([np.cos(x[0]), np.cos(x[1])])
+        # return np.array([np.cos(x[0]), np.cos(x[1])])
+        return np.array([4*x[0]**3 + 8*x[0]*x[1]**2 - 4*x[0],
+                         8*x[0]**2*x[1] + 4*x[1]])
 
     def get_hess(self, position):
         """

@@ -22,7 +22,7 @@ class Dimer:
         # 是否打印中间数据
         self.whether_print = whether_print
         # 旋转力收敛值
-        self.min_vertical_force = 1e-4
+        self.min_vertical_force = 1e-2
         self.min_value = 1e-20
         self.PES = PES
         self.n = n
@@ -48,7 +48,7 @@ class Dimer:
         self.c = 0
         self.delta = 0.001
         self.delta_angle = np.pi / 180
-        self.timer = 0.16  # dimer步进时间，此处修改没用，在translate中修改
+        self.timer = 0.06  # dimer步进时间，此处修改没用，在translate中修改
         self.bk = np.eye(n)  # Hessian矩阵近似
         self.angle = 0
         self.position_list = []
@@ -210,6 +210,7 @@ class Dimer:
         """
         移动dimer, 线性探测法
         """
+        plt.plot(self)
         self.angle = 0
         # dimer合力
         f_r = self.f_r
@@ -230,7 +231,7 @@ class Dimer:
                     m += 1
                 self.timer = 0.1*m
 
-            elif np.linalg.norm(self.f_r) < 0.9:
+            elif np.linalg.norm(self.f_r) < 0.5:
                 # 鞍点附近, 一维线性搜索，步长调整
                 m = 0
                 m_max = 4
@@ -242,14 +243,22 @@ class Dimer:
                     m += 1
                 self.timer = 0.5 ** m
             else:
-                self.timer = 0.16
-                f_to_saddle = f_to_saddle * (1 + np.dot(f_to_saddle, self.v) / np.dot(f_to_saddle, f_to_saddle))
+                # 前方是过渡态
+                m = 2
+                value_list = [self.get_value(self.position), self.get_value(self.position + f_to_saddle * 0.1)]
+                while m < 10:
+                    value_1 = self.get_value(self.position + f_to_saddle * (0.1 * m))
+                    if (value_list[-1] - value_list[-2]) * (value_1 - value_list[-1]) <= 0:
+                        break
+                    value_list.append(value_1)
+                    m += 1
+                self.timer = 0.1 * m
 
         else:
             f_to_saddle = - f_parallel
             # 一维搜索取值较小的的点
             m = 0
-            m_max = 3
+            m_max = 4
             value_now = self.get_value(self.position)
             while True:
                 if value_now > self.get_value(self.position + f_to_saddle * 0.5 ** m) or m >= m_max:
@@ -268,7 +277,7 @@ class Dimer:
         times = []
         for i in range(1200):
             pre_c = self.c
-            for j in range(200):
+            for j in range(20):
                 rotate_angle = self.get_rotate_angle()
                 self.rotate(rotate_angle)
                 if self.whether_print:
@@ -278,14 +287,11 @@ class Dimer:
                     if self.c > pre_c:  # 如果曲率上升，旋转pi/2 + angle, 重要
                         self.rotate(np.pi / 2)
                         continue
-                    times.append(j)
                     break
-                elif j == 199:
-                    times.append(j)
-            self.translate_v1()
+            self.translate_v3()
+            times.append(j)
             if self.whether_print:
-                print('parallel force', np.dot(self.vector, self.f_r) * self.vector,
-                      'verticle force', '\n')
+                print('parallel force', np.dot(self.vector, self.f_r) * self.vector, '\n')
             self.position_list.append(self.position.copy())
             if (np.abs(self.f_r) < 0.1).all():  # 所有方向都相反
                 if self.c < 0.0:
@@ -413,17 +419,18 @@ def test_1():
     np.random.seed(10)
     for i in range(1, 7):
         plt.figure(i)
-        ini_position = (np.random.rand(2) - 0.5) * 10
+        ini_position = (np.random.rand(2) - 0.5)
         angle = np.pi / 180 * 3
         ini_vector = [np.cos(angle), np.sin(angle)]
         ini_vector = np.random.rand(2)
         PES = SimpleSurface()
         d = Dimer(PES, 2, ini_position, ini_vector, whether_print=True)
+        d.PES.show_surface_2d(-0.5, 0.5)
         position_d, times_d = d.work()  # 得到dimer运行轨迹和每一次的旋转数
         d.PES.show_point_2d(position_d)
-        d.PES.show_surface_2d(-5, 5)
+
         plt.title('Dimer rotates %d times and run %d times \n '
-                  % (sum(times_d), len(times_d)))
+                  % (sum(times_d), len(position_d)))
 
         x1 = d.position + d.vector * d.r
         plt.plot(x1[0], x1[1], 'ko')  # 画出点1位置
