@@ -254,11 +254,11 @@ class DimerGaussian(Dimer):
         """
         return self.PES.get_force(position)
 
-    def work(self):
+    def work(self, result_path=''):
         self._update_all()
         # 旋转到曲率最小
         times = []
-        for i in range(1200):
+        for i in range(200):
             pre_c = self.c
             for j in range(200):
                 rotate_angle = self.get_rotate_angle()
@@ -271,13 +271,11 @@ class DimerGaussian(Dimer):
                     if self.c > pre_c:  # 如果曲率上升，旋转pi/2 + angle, 重要
                         self.rotate(np.pi / 2)
                         continue
-                    times.append(j)
                     break
-                elif j == 199:
-                    times.append(j)
             self.translate_v1()
+            times.append(j)
             # 把移动后的分子存储起来
-            self.PES.generate_input('test_dimer' + str(i) + '.gjf', self.position.reshape((-1, 3)),
+            self.PES.generate_input(result_path + 'test_dimer' + str(i) + '.gjf', self.position.reshape((-1, 3)),
                                     self.PES.elements)
 
             if (np.abs(self.f_r) < 0.5).all():  # 所有方向都相反
@@ -357,7 +355,32 @@ class NewtonGaussian(Newton):
         return k
 
 
-if __name__ == '__main__':
+def baker_test_dimer():
+    np.random.seed(2)
+    baker_folder_path = r'D:\graduate_project\transition_state\saddle-point-algorithm\baker_molcule'
+    result_folder_path = r'D:\graduate_project\transition_state\result'
+    cal_nums = []
+    for i in range(1, 3):
+        baker_path = baker_folder_path + str(i)
+        result_path = result_folder_path + str(i)
+        os.chdir(result_path)
+        g = GaussianFile()
+        ini_position = g.gjf_read(baker_path + r'.gjf').reshape((1, -1))
+        # 算法测试
+        d = DimerGaussian(g, ini_position.size, ini_position=ini_position)
+        times_d = d.work()
+        # 存储信息到 result.txt
+        with open(result_folder_path+'result.txt', 'a+') as f:
+            f.write(str(i)+' '*2 + 'Dimer rotates %d times and run %d times \n '
+                    % (sum(times_d), len(times_d)))
+        cal_nums.append(g.cal_num)
+    with open(result_folder_path+'result.txt', 'a+') as f:
+        f.write(str(cal_nums))
+
+    return cal_nums
+
+
+def my_test():
     path = r'D:\graduate_project\transition_state\dimer_test_co2'
     os.chdir(path)
     g = GaussianFile()
@@ -366,6 +389,9 @@ if __name__ == '__main__':
     # bfgs algorithm
     Ne_bfgs = NewtonGaussian(g, ini_position)
     Ne_bfgs.bfgs_newton(hess_fun=g.get_hess)
-
     # d = DimerGaussian(g, ini_position.size, ini_position=ini_position)
     # d.work()
+
+
+if __name__ == '__main__':
+    a = 1

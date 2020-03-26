@@ -48,7 +48,7 @@ class Dimer:
         self.c = 0
         self.delta = 0.001
         self.delta_angle = np.pi / 180
-        self.timer = 0.06  # dimer步进时间，此处修改没用，在translate中修改
+        self.timer = 0.06  # dimer步进时间
         self.bk = np.eye(n)  # Hessian矩阵近似
         self.angle = 0
         self.position_list = []
@@ -210,64 +210,55 @@ class Dimer:
         """
         移动dimer, 线性探测法
         """
-        plt.plot(self)
+        # plt.plot(self.position[0], self.position[1])
         self.angle = 0
         # dimer合力
         f_r = self.f_r
         # dimer平行力
         f_parallel = np.dot(self.vector, f_r) * self.vector
         # dimer指向鞍点力
+        timer_alpha = 1  # self.timer的倍数
         if self.c < 0:
             f_to_saddle = f_r - f_parallel * 2  # 平行力反向
             if np.linalg.norm(self.force(self.position - f_to_saddle*0.01)) < np.linalg.norm(self.f_r):
                 # 后面是极值，需要跳出
+                value_list = [self.get_value(self.position),
+                              self.get_value(self.position + f_to_saddle*self.timer)]
                 m = 2
-                value_list = [self.get_value(self.position), self.get_value(self.position + f_to_saddle*0.1)]
                 while m < 10:
-                    value_1 = self.get_value(self.position + f_to_saddle*(0.1*m))
+                    value_1 = self.get_value(self.position + f_to_saddle*(self.timer*m))
                     if (value_list[-1] - value_list[-2]) * (value_1 - value_list[-1]) <= 0:
                         break
                     value_list.append(value_1)
                     m += 1
-                self.timer = 0.1*m
+                timer_alpha = m
 
             elif np.linalg.norm(self.f_r) < 0.5:
                 # 鞍点附近, 一维线性搜索，步长调整
-                m = 0
-                m_max = 4
+                m = 5
                 while True:
-                    f_r_next = self.force(self.position + f_to_saddle * 0.5 ** m)
-                    if np.linalg.norm(self.f_r) > np.linalg.norm(f_r_next) or m >= m_max:
+                    f_r_next = self.force(self.position + f_to_saddle * self.timer * m)
+                    if np.linalg.norm(self.f_r) > np.linalg.norm(f_r_next) or m <= 1:
                         self.f_r = f_r_next  # 目标点梯度已经计算过了
                         break
-                    m += 1
-                self.timer = 0.5 ** m
+                    m -= 1
+                timer_alpha = m
             else:
-                # 前方是过渡态
-                m = 2
-                value_list = [self.get_value(self.position), self.get_value(self.position + f_to_saddle * 0.1)]
-                while m < 10:
-                    value_1 = self.get_value(self.position + f_to_saddle * (0.1 * m))
-                    if (value_list[-1] - value_list[-2]) * (value_1 - value_list[-1]) <= 0:
-                        break
-                    value_list.append(value_1)
-                    m += 1
-                self.timer = 0.1 * m
+                timer_alpha = 1
 
         else:
             f_to_saddle = - f_parallel
             # 一维搜索取值较小的的点
-            m = 0
-            m_max = 4
+            m = 11
             value_now = self.get_value(self.position)
             while True:
-                if value_now > self.get_value(self.position + f_to_saddle * 0.5 ** m) or m >= m_max:
+                if value_now > self.get_value(self.position + f_to_saddle * self.timer * m) or m <= 2:
                     break
-                m += 1
-            self.timer = 0.5 ** m
+                m -= 2
+            timer_alpha = m
 
         self.v = f_to_saddle
-        self.position += (self.v * self.timer)
+        self.position += (self.v * self.timer * timer_alpha)
         # 计算新点相关数据
         self._update_f()
 
@@ -283,12 +274,12 @@ class Dimer:
                 if self.whether_print:
                     print('rotated force: ', np.linalg.norm(self.f_vertical))
                 # 垂直力大小
-                if np.linalg.norm(self.vertical_force(self.f1-self.f2, self.vector)) < self.min_vertical_force:
+                if np.linalg.norm(self.vertical_force(self.f1 - self.f2, self.vector)) < self.min_vertical_force:
                     if self.c > pre_c:  # 如果曲率上升，旋转pi/2 + angle, 重要
                         self.rotate(np.pi / 2)
                         continue
                     break
-            self.translate_v3()
+            self.translate_v1()
             times.append(j)
             if self.whether_print:
                 print('parallel force', np.dot(self.vector, self.f_r) * self.vector, '\n')
@@ -386,7 +377,7 @@ class Dimer:
             self.f1[:] = self.force(self.position + self.vector * self.r)
             if (self.f_r == self.f_r_pre).all():  # 没有更新f_r
                 self.f_r[:] = self.force(self.position)
-                self.f_r_pre[:] = self.f_r[:]
+            self.f_r_pre[:] = self.f_r[:]
             self.f2[:] = 2 * self.f_r - self.f1
             self.position_pre[:] = self.position[:]
         return
@@ -414,7 +405,7 @@ class Dimer:
         self._update_c()
 
 
-def test_1():
+def atest_1():
     # 随机选取位置测试
     np.random.seed(10)
     for i in range(1, 7):
@@ -430,13 +421,13 @@ def test_1():
         d.PES.show_point_2d(position_d)
 
         plt.title('Dimer rotates %d times and run %d times \n '
-                  % (sum(times_d), len(position_d)))
+                  % (sum(times_d), len(times_d)))
 
         x1 = d.position + d.vector * d.r
         plt.plot(x1[0], x1[1], 'ko')  # 画出点1位置
 
 
-def test_extreme():
+def atest_extreme():
     # 极端情况（极大极小）测试
     np.random.seed(7)
     ini_position1 = np.array([[-4.3, 1.6], [-np.pi / 2 * 1.1, -np.pi / 2]], 'f')
@@ -462,5 +453,5 @@ def test_extreme():
         # plt.plot(f_r_list)
 
 if __name__ == "__main__":
-    test_1()
+    atest_1()
 
