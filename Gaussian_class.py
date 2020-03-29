@@ -279,7 +279,7 @@ class DimerGaussian(Dimer):
                                     self.PES.elements)
 
             if (np.abs(self.f_r) < 0.5).all():  # 所有方向都相反
-                if self.c < 0.2:
+                if self.c < 0.0:
                     if self.whether_print:
                         print('step: ', i)
                     break
