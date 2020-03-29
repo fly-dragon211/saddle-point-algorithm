@@ -153,9 +153,37 @@ class Dimer:
         # 计算曲率
         self._update_c()
 
-    def translate_v1(self):
+    def translate_v0(self):
         """
         移动dimer, 梯度下降法
+        """
+        self.angle = 0
+        # dimer合力
+        f_r = self.f_r
+        # dimer平行力
+        f_parallel = np.dot(self.vector, f_r) * self.vector
+        # dimer指向鞍点力
+        if self.c < 0:
+            f_to_saddle = f_r - f_parallel * 2  # 平行力反向
+        else:
+            f_to_saddle = - f_parallel
+        delta_v = f_to_saddle
+        # 速度调整
+        if np.dot(self.v, f_to_saddle) < 0:
+            self.v = delta_v
+        else:
+            delta_v_abs = np.dot(delta_v, delta_v)
+            if delta_v_abs < self.min_value:
+                self.v[:] = 0
+            else:
+                self.v = delta_v
+        self.position += (self.v * self.timer)
+        # 计算新点相关数据
+        self._update_f()
+
+    def translate_v1(self):
+        """
+        移动dimer, 加速梯度下降法？
         """
         self.angle = 0
         # dimer合力
@@ -232,15 +260,19 @@ class Dimer:
                     m += 2
                 timer_alpha = m
 
-            elif np.linalg.norm(self.f_r) < 0.5:
+            elif np.linalg.norm(self.f_r) < 0.7:
                 # 鞍点附近, 一维线性搜索，步长调整
-                m = 5
-                while True:
+                m = 1
+                force_list = []
+                force_list.append(self.f_r.copy())
+                while m <= 7:
                     f_r_next = self.force(self.position + f_to_saddle * self.timer * m)
-                    if np.linalg.norm(self.f_r) > np.linalg.norm(f_r_next) or m <= 1:
-                        self.f_r = f_r_next  # 目标点梯度已经计算过了
+                    force_list.append(f_r_next.copy())
+                    if np.linalg.norm(force_list[-1]) > np.linalg.norm(force_list[-2]) and m > 2:
+                        m -= 2
+                        force_list.pop()
                         break
-                    m -= 1
+                    m += 2
                 timer_alpha = m
             else:
                 timer_alpha = 1
@@ -441,35 +473,6 @@ class DimerRo(Dimer):
         # c_angle = -np.dot(new_f1 - self.f_r, new_vector) / self.r  # 旋转后曲率
         return angle
 
-    def translate_v1(self):
-        """
-        移动dimer, 梯度下降法
-        """
-        self.angle = 0
-        # dimer合力
-        f_r = self.f_r
-        # dimer平行力
-        f_parallel = np.dot(self.vector, f_r) * self.vector
-        # dimer指向鞍点力
-        if self.c < 0:
-            f_to_saddle = f_r - f_parallel * 2  # 平行力反向
-        else:
-            f_to_saddle = - f_parallel
-        # f_to_saddle = f_r - f_parallel * 2  这样会增加旋转，减少移动
-        delta_v = f_to_saddle
-        # 速度调整
-        if np.dot(self.v, f_to_saddle) < 0:
-            self.v = delta_v
-        else:
-            delta_v_abs = np.dot(delta_v, delta_v)
-            if delta_v_abs < self.min_value:
-                self.v[:] = 0
-            else:
-                self.v = delta_v * (1+np.dot(delta_v, self.v)/np.dot(delta_v, delta_v))
-        self.position += (self.v * self.timer)
-        # 计算新点相关数据
-        self._update_f()
-
     def work(self):
         self._update_all()
         # 旋转到曲率最小
@@ -549,7 +552,7 @@ class DimerRo(Dimer):
 def atest_1():
     # 随机选取位置测试
     np.random.seed(10)
-    for i in range(1, 10):
+    for i in range(1, 6):
         plt.figure(i)
         ini_position = (np.random.rand(2) - 0.5)
         angle = np.pi / 180 * 3

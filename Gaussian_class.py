@@ -10,6 +10,7 @@
 import numpy as np
 import os
 import re
+import time
 
 from dimer_vertical import Dimer
 from newton import Newton
@@ -237,8 +238,9 @@ class DimerGaussian(Dimer):
         super().__init__(PES, n, ini_position,
                  ini_vector, ini_velocity,
                  whether_print)
-        self.min_vertical_force = 0.05  # 旋转力收敛值
+        self.min_vertical_force = 0.02  # 旋转力收敛值
         self.min_value = 1e-20
+        self.timer = 0.16  # dimer步进时间
         self.n = n
         self.r = 0.005
 
@@ -260,7 +262,7 @@ class DimerGaussian(Dimer):
         times = []
         for i in range(200):
             pre_c = self.c
-            for j in range(200):
+            for j in range(20):
                 rotate_angle = self.get_rotate_angle()
                 self.rotate(rotate_angle)
                 if self.whether_print:
@@ -268,17 +270,17 @@ class DimerGaussian(Dimer):
                 self.store_information()  # 存储dimer信息
                 # 垂直力大小
                 if np.linalg.norm(self.vertical_force(self.f1 - self.f2, self.vector)) < self.min_vertical_force:
-                    if self.c > pre_c:  # 如果曲率上升，旋转pi/2 + angle, 重要
+                    if self.c > pre_c and self.c > 0:  # 如果曲率上升，旋转pi/2 + angle, 重要
                         self.rotate(np.pi / 2)
                         continue
                     break
-            self.translate_v1()
+            self.translate_v3()
             times.append(j)
             # 把移动后的分子存储起来
             self.PES.generate_input(result_path + 'test_dimer' + str(i) + '.gjf', self.position.reshape((-1, 3)),
                                     self.PES.elements)
 
-            if (np.abs(self.f_r) < 0.5).all():  # 所有方向都相反
+            if (np.abs(self.f_r) < 0.1).all():  # 所有方向都相反
                 if self.c < 0.0:
                     if self.whether_print:
                         print('step: ', i)
@@ -355,25 +357,75 @@ class NewtonGaussian(Newton):
         return k
 
 
+def mkdir(path):
+    folder = os.path.exists(path)
+
+    if not folder:  # 判断是否存在文件夹如果不存在则创建为文件夹
+        os.makedirs(path)  # makedirs 创建文件时如果路径不存在会创建这个路径
+        print("---  new folder...  ---")
+
+
 def baker_test_dimer():
     np.random.seed(2)
-    baker_folder_path = r'D:\graduate_project\transition_state\saddle-point-algorithm\baker_molcule'
-    result_folder_path = r'D:\graduate_project\transition_state\result'
+    baker_folder_path = r'D:\graduate_project\transition_state\saddle-point-algorithm\baker_molcule' + '\\'
+    result_folder_path = r'D:\graduate_project\transition_state\result_v0' + '\\'
+    mkdir(result_folder_path)
     cal_nums = []
-    for i in range(1, 3):
+    cal_time = []
+    for i in range(1, 4):
         baker_path = baker_folder_path + str(i)
         result_path = result_folder_path + str(i)
+        # 进入result/i文件夹，不存在则创建
+        mkdir(result_path)
         os.chdir(result_path)
         g = GaussianFile()
         ini_position = g.gjf_read(baker_path + r'.gjf').reshape((1, -1))
         # 算法测试
         d = DimerGaussian(g, ini_position.size, ini_position=ini_position)
+        cal_time_begin = time.time()
         times_d = d.work()
+
+        cal_time.append(time.time()-cal_time_begin)
+        cal_nums.append(g.cal_num.copy())
         # 存储信息到 result.txt
         with open(result_folder_path+'result.txt', 'a+') as f:
-            f.write(str(i)+' '*2 + 'Dimer rotates %d times and run %d times \n '
-                    % (sum(times_d), len(times_d)))
-        cal_nums.append(g.cal_num)
+            f.write(str(i)+' '*2 + 'Dimer rotates %d times, run %d times. %f second. E_final %f\n '
+                    % (sum(times_d), len(times_d), cal_time[-1], d.get_value(d.position)))
+
+    with open(result_folder_path+'result.txt', 'a+') as f:
+        f.write(str(cal_nums))
+
+    return cal_nums
+
+
+def baker_test_Newton():
+    np.random.seed(2)
+    baker_folder_path = r'D:\graduate_project\transition_state\saddle-point-algorithm\baker_molcule' + '\\'
+    result_folder_path = r'D:\graduate_project\transition_state\result_v3' + '\\'
+    mkdir(result_folder_path)
+    cal_nums = []
+    cal_time = []
+    for i in range(1, 4):
+        baker_path = baker_folder_path + str(i)
+        result_path = result_folder_path + str(i)
+        # 进入result/i文件夹，不存在则创建
+        mkdir(result_path)
+        os.chdir(result_path)
+        g = GaussianFile()
+        ini_position = g.gjf_read(baker_path + r'.gjf').reshape((1, -1))
+        # 算法测试
+        # bfgs algorithm
+        Ne_bfgs = NewtonGaussian(g, ini_position)
+        cal_time_begin = time.time()
+        k = Ne_bfgs.bfgs_newton(hess_fun=g.get_hess)
+
+        cal_time.append(time.time()-cal_time_begin)
+        cal_nums.append(g.cal_num.copy())
+        # 存储信息到 result.txt
+        with open(result_folder_path+'result.txt', 'a+') as f:
+            f.write(str(i)+' '*2 + 'Newton run %d times. %f second\n '
+                    % (k, cal_time[-1]))
+
     with open(result_folder_path+'result.txt', 'a+') as f:
         f.write(str(cal_nums))
 
@@ -394,4 +446,4 @@ def my_test():
 
 
 if __name__ == '__main__':
-    a = 1
+    baker_test_dimer()
