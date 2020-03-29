@@ -259,8 +259,7 @@ class Dimer:
                     value_list.append(value_1)
                     m += 2
                 timer_alpha = m
-
-            elif np.linalg.norm(self.f_r) < 0.7:
+            else:
                 # 鞍点附近, 一维线性搜索，步长调整
                 m = 1
                 force_list = []
@@ -274,8 +273,6 @@ class Dimer:
                         break
                     m += 2
                 timer_alpha = m
-            else:
-                timer_alpha = 1
 
         else:
             f_to_saddle = - f_parallel
