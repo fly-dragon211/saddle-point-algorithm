@@ -12,7 +12,7 @@ import os
 import re
 import time
 
-from dimer_vertical import Dimer
+from dimer_vertical import Dimer, DimerRo
 from newton import Newton
 
 
@@ -240,7 +240,7 @@ class DimerGaussian(Dimer):
                  whether_print)
         self.min_vertical_force = 0.02  # 旋转力收敛值
         self.min_value = 1e-20
-        self.timer = 0.16  # dimer步进时间
+        self.timer = 0.06  # dimer步进时间
         self.n = n
         self.r = 0.005
 
@@ -294,6 +294,72 @@ class DimerGaussian(Dimer):
         # 存储dimer信息到 information.txt
         with open('information_dimer.txt', 'a+') as f:
             f.write('rotated force: ' + str(np.linalg.norm(self.f_vertical))
+                    + 'vector: ' + str(self.vector) + '\n')
+            f.write('curvature: ' + str(self.c))
+
+
+class DimerRoGaussian(DimerRo):
+    def __init__(self, PES, n, ini_position=None,
+                 ini_vector=None, ini_velocity=None,
+                 whether_print=False):
+        super().__init__(PES, n, ini_position,
+                 ini_vector, ini_velocity,
+                 whether_print)
+        self.min_vertical_force = 0.02  # 旋转力收敛值
+        self.min_value = 1e-20
+        self.timer = 0.16  # dimer步进时间
+        self.n = n
+        self.r = 0.005
+
+    def get_value(self, position):
+        """
+        获取值
+        """
+        return self.PES.get_value(position)
+
+    def force(self, position):
+        """
+        计算像点受力，一阶梯度
+        """
+        return self.PES.get_force(position)
+
+    def work(self, result_path=''):
+        self._update_all()
+        # 旋转到曲率最小
+        times = []
+        for i in range(200):
+            pre_c = self.c
+            for j in range(20):
+                rotate_angle = self.get_rotate_angle()
+                self.rotate(rotate_angle)
+                self.store_information(rotate_angle)  # 存储dimer信息
+                if pre_c < self.c and self.c > 0:
+                    self.rotate(np.pi / 2)
+                    print('rotate_angle', rotate_angle * 180 / np.pi,
+                          'pre_c: %f, c: %f' % (pre_c, self.c))
+                # 旋转角度小于某个值
+                if np.abs(rotate_angle) < np.pi/180 * 5:
+                    break
+            self.translate_v3()
+            times.append(j)
+            # 把移动后的分子存储起来
+            self.PES.generate_input(result_path + 'test_dimer' + str(i) + '.gjf', self.position.reshape((-1, 3)),
+                                    self.PES.elements)
+
+            if (np.abs(self.f_r) < 0.1).all():  # 所有方向都相反
+                if self.c < 0.0:
+                    if self.whether_print:
+                        print('step: ', i)
+                    break
+        if self.whether_print:
+            print('time', times)
+            print(self.position / np.pi * 180)
+        return times
+
+    def store_information(self, rotate_angle):
+        # 存储dimer信息到 information.txt
+        with open('information_dimer.txt', 'a+') as f:
+            f.write('rotated angle: ' + str(rotate_angle * 180 / np.pi)
                     + 'vector: ' + str(self.vector) + '\n')
             f.write('curvature: ' + str(self.c))
 
@@ -365,10 +431,9 @@ def mkdir(path):
         print("---  new folder...  ---")
 
 
-def baker_test_dimer():
+def baker_test_dimer(result_folder_path):
     np.random.seed(2)
     baker_folder_path = r'D:\graduate_project\transition_state\saddle-point-algorithm\baker_molcule' + '\\'
-    result_folder_path = r'D:\graduate_project\transition_state\result_v0' + '\\'
     mkdir(result_folder_path)
     cal_nums = []
     cal_time = []
@@ -381,7 +446,7 @@ def baker_test_dimer():
         g = GaussianFile()
         ini_position = g.gjf_read(baker_path + r'.gjf').reshape((1, -1))
         # 算法测试
-        d = DimerGaussian(g, ini_position.size, ini_position=ini_position)
+        d = DimerRoGaussian(g, ini_position.size, ini_position=ini_position)
         cal_time_begin = time.time()
         times_d = d.work()
 
@@ -446,4 +511,8 @@ def my_test():
 
 
 if __name__ == '__main__':
-    baker_test_dimer()
+    # result_folder = r'D:\graduate_project\transition_state\result_v0' + '\\'
+    # baker_test_dimer(result_folder)
+    a = input('请输入计算结果路径：')
+    print('计算结果路径：%s' % a)
+    print('-----------开始计算------------')

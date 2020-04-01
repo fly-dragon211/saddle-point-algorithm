@@ -14,12 +14,13 @@ class SimpleSurface():
         self.n = 2  # 变量个数
         self.delta = 0.001  # 计算梯度时使用
         self.point = []
-        self.fig = None
+        self.cal_num = [0, 0, 0]  # 能量，梯度，hessian计算次数
 
     def get_value(self, position):
         """
         计算函数
         """
+        self.cal_num[0] += 1
         _x = position
         # return np.sin(_x[0]) + np.sin(_x[1])
         return _x[0]**4 + 4*_x[0]**2*_x[1]**2 - 2*_x[0]**2 + 2*_x[1]**2
@@ -28,6 +29,7 @@ class SimpleSurface():
         """
         计算一阶梯度
         """
+        self.cal_num[1] += 1
         x = position
         # return np.array([np.cos(x[0]), np.cos(x[1])])
         return np.array([4*x[0]**3 + 8*x[0]*x[1]**2 - 4*x[0],
@@ -37,6 +39,7 @@ class SimpleSurface():
         """
         Hessian矩阵
         """
+        self.cal_num[2] += 1
         x = position
         return np.array([[-np.sin(x[0]), 0], [0, -np.sin(x[1])]])
 
@@ -45,8 +48,10 @@ class SimpleSurface():
         放在show_point后面
         :return:
         """
-        x_array = np.arange(-4, 4, 0.3)
-        y_array = np.arange(-4, 4, 0.3)
+        self.fig = plt.figure()
+        self.ax = Axes3D(self.fig)
+        x_array = np.arange(-1, 1, 0.03)
+        y_array = np.arange(-1, 1, 0.03)
         x, y = np.meshgrid(x_array, y_array)
         # z = [self.get_value([x_, y_]) for x_, y_ in zip(x, y)]
         z = self.get_value([x, y])
@@ -60,8 +65,8 @@ class SimpleSurface():
         """
         显示点
         """
-        self.fig = plt.figure()
         # ax = fig.add_subplot(111, projection='3d')
+        self.fig = plt.figure()
         self.ax = Axes3D(self.fig)
         self.ax.scatter(x, y, z)
         self.ax.set_zlim(-4, 4)
@@ -103,5 +108,6 @@ if __name__ == "__main__":
     x = [1, 1]
     y = [1, 2]
     z = [3, 3]
-    ss.show_surface_2d(-5, 5)
+    # ss.show_surface_2d(-5, 5)
+    ss.show_surface_3d()
     ss.show()
