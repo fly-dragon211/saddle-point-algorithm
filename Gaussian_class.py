@@ -12,7 +12,7 @@ import os
 import re
 import time
 
-from dimer_vertical import Dimer, DimerRo
+from dimer_vertical import Dimer, DimerRo, DimerQs
 from newton import Newton
 
 
@@ -33,24 +33,22 @@ class GaussianFile:
                           '#p force pm6\n',
                           '\n',
                           'title\n',
-                          '\n',
-                          '0 1\n']
+                          '\n']
         self.file_head_noforce = ['%mem=500MB\n',
                                    '%nprocshared=4\n',
                                    '#pm6\n',
                                    '\n',
                                    'title\n',
-                                   '\n',
-                                   '0 1\n']
+                                   '\n',]
         self.file_head_noforce1 = ['%mem=500MB\n', '%nprocshared=4\n', '# B3LYP/6-31G(d) sp\n',
-                          '\n', 'title\n', '\n', '0 1\n']
+                          '\n', 'title\n', '\n']
         self.file_head_hess = ['%mem=500MB\n',
                                    '%nprocshared=4\n',
                                    '#p freq pm6\n',
                                    '\n',
                                    'title\n',
-                                   '\n',
-                                   '0 1\n']
+                                   '\n']
+        self.file_electron = '0 1\n'
 
         self.file_rear = ['\n1 3 1.0 4 1.0 5 1.0\n', '2\n', '3\n', '4\n', '5\n']
 
@@ -69,6 +67,7 @@ class GaussianFile:
             elif cal_type == 2:
                 for line in self.file_head_hess:
                     f.writelines(line)
+            f.write(self.file_electron)
             for i in range(len(coordinates)):
                 f.writelines(' '+elements[i]+'  '+'%.8f' % coordinates[i][0]+'  '
                              + '%.8f' % coordinates[i][1]+'  '+'%.8f' % coordinates[i][2]+'\n')
@@ -88,6 +87,13 @@ class GaussianFile:
         else:
             print('文件不存在! :', file_path)
             return
+        # 修改电荷数和自旋多重度
+        p = re.compile(r'\n(\d \d\n)')
+        electron = p.findall(text)
+        if len(electron) > 1:
+            input('有多个自旋多重度。')
+        self.file_electron = electron[0]
+        # 修改元素文件
         self.elements = re.findall(self.pattern_elements, text)
         coordinates = np.array(re.findall(self.pattern_coordinates, text), dtype=float)
         coordinates = coordinates.reshape((-1, 3))
@@ -231,7 +237,7 @@ class GaussianFile:
         return energy
 
 
-class DimerGaussian(Dimer):
+class DimerGaussian(DimerQs):
     def __init__(self, PES, n, ini_position=None,
                  ini_vector=None, ini_velocity=None,
                  whether_print=False):
@@ -240,7 +246,7 @@ class DimerGaussian(Dimer):
                  whether_print)
         self.min_vertical_force = 0.02  # 旋转力收敛值
         self.min_value = 1e-20
-        self.timer = 0.06  # dimer步进时间
+        self.timer = 0.03  # dimer步进时间
         self.n = n
         self.r = 0.005
 
@@ -256,11 +262,11 @@ class DimerGaussian(Dimer):
         """
         return self.PES.get_force(position)
 
-    def work(self, result_path=''):
+    def work(self, result_path='', cal_method=0):
         self._update_all()
         # 旋转到曲率最小
         times = []
-        for i in range(200):
+        for i in range(30):
             pre_c = self.c
             for j in range(20):
                 rotate_angle = self.get_rotate_angle()
@@ -274,7 +280,7 @@ class DimerGaussian(Dimer):
                         self.rotate(np.pi / 2)
                         continue
                     break
-            self.translate_v3()
+            self.translate(cal_method)
             times.append(j)
             # 把移动后的分子存储起来
             self.PES.generate_input(result_path + 'test_dimer' + str(i) + '.gjf', self.position.reshape((-1, 3)),
@@ -431,13 +437,13 @@ def mkdir(path):
         print("---  new folder...  ---")
 
 
-def baker_test_dimer(result_folder_path):
+def baker_test_dimer(result_folder_path, cal_method=0):
     np.random.seed(2)
     baker_folder_path = r'D:\graduate_project\transition_state\saddle-point-algorithm\baker_molcule' + '\\'
     mkdir(result_folder_path)
     cal_nums = []
     cal_time = []
-    for i in range(1, 4):
+    for i in range(1, 26):
         baker_path = baker_folder_path + str(i)
         result_path = result_folder_path + str(i)
         # 进入result/i文件夹，不存在则创建
@@ -446,19 +452,22 @@ def baker_test_dimer(result_folder_path):
         g = GaussianFile()
         ini_position = g.gjf_read(baker_path + r'.gjf').reshape((1, -1))
         # 算法测试
-        d = DimerRoGaussian(g, ini_position.size, ini_position=ini_position)
+        d = DimerGaussian(g, ini_position.size, ini_position=ini_position)
         cal_time_begin = time.time()
-        times_d = d.work()
+        times_d = d.work(cal_method=cal_method)
 
         cal_time.append(time.time()-cal_time_begin)
         cal_nums.append(g.cal_num.copy())
         # 存储信息到 result.txt
-        with open(result_folder_path+'result.txt', 'a+') as f:
+        with open(result_folder_path+'run_result.txt', 'a+') as f:
+            f.write(str(g.cal_num) + '\n')
             f.write(str(i)+' '*2 + 'Dimer rotates %d times, run %d times. %f second. E_final %f\n '
                     % (sum(times_d), len(times_d), cal_time[-1], d.get_value(d.position)))
 
+
     with open(result_folder_path+'result.txt', 'a+') as f:
-        f.write(str(cal_nums))
+        f.write('# method: v' + str(cal_method) + '\n')
+        f.write(str(cal_nums) + '\n')
 
     return cal_nums
 
@@ -492,6 +501,7 @@ def baker_test_Newton():
                     % (k, cal_time[-1]))
 
     with open(result_folder_path+'result.txt', 'a+') as f:
+
         f.write(str(cal_nums))
 
     return cal_nums
@@ -511,8 +521,9 @@ def my_test():
 
 
 if __name__ == '__main__':
-    # result_folder = r'D:\graduate_project\transition_state\result_v0' + '\\'
-    # baker_test_dimer(result_folder)
-    a = input('请输入计算结果路径：')
-    print('计算结果路径：%s' % a)
-    print('-----------开始计算------------')
+    matrix_result = []
+    result_folder = r'D:\graduate_project\transition_state\result' + '\\'
+    for cal_method in range(1, 4):
+        cal_nums = baker_test_dimer(result_folder, cal_method)
+        cal_nums = np.array(cal_nums)
+        matrix_result.append(cal_nums)

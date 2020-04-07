@@ -153,125 +153,15 @@ class Dimer:
         # 计算曲率
         self._update_c()
 
-    def translate_v0(self):
-        """
-        移动dimer, 梯度下降法
-        """
-        self.angle = 0
-        # dimer合力
-        f_r = self.f_r
-        # dimer平行力
-        f_parallel = np.dot(self.vector, f_r) * self.vector
-        # dimer指向鞍点力
-        if self.c < 0:
-            f_to_saddle = f_r - f_parallel * 2  # 平行力反向
+    def translate(self, method=0):
+        if method == 0:
+            return self._translate_v0()
+        elif method == 1:
+            return self._translate_v1()
+        elif method == 2:
+            return self._translate_v2()
         else:
-            f_to_saddle = - f_parallel
-        delta_v = f_to_saddle
-        # 速度调整
-        if np.dot(self.v, f_to_saddle) < 0:
-            self.v = delta_v
-        else:
-            delta_v_abs = np.dot(delta_v, delta_v)
-            if delta_v_abs < self.min_value:
-                self.v[:] = 0
-            else:
-                self.v = delta_v
-        self.position += (self.v * self.timer)
-        # 计算新点相关数据
-        self._update_f()
-
-    def translate_v1(self):
-        """
-        移动dimer, 加速梯度下降法？
-        """
-        self.angle = 0
-        # dimer合力
-        f_r = self.f_r
-        # dimer平行力
-        f_parallel = np.dot(self.vector, f_r) * self.vector
-        # dimer指向鞍点力
-        if self.c < 0:
-            f_to_saddle = f_r - f_parallel * 2  # 平行力反向
-        else:
-            f_to_saddle = - f_parallel
-        # f_to_saddle = f_r - f_parallel * 2  这样会增加旋转，减少移动
-        delta_v = f_to_saddle
-        # 速度调整
-        if np.dot(self.v, f_to_saddle) < 0:
-            self.v = delta_v
-        else:
-            delta_v_abs = np.dot(delta_v, delta_v)
-            if delta_v_abs < self.min_value:
-                self.v[:] = 0
-            else:
-                self.v = delta_v * (1 + np.dot(delta_v, self.v) / np.dot(delta_v, delta_v))
-        self.position += (self.v * self.timer)
-        # 计算新点相关数据
-        self._update_f()
-
-    def translate_v3(self):
-        """
-        移动dimer, 线性探测法
-        """
-        self.angle = 0
-        # dimer合力
-        f_r = self.f_r
-        # dimer平行力
-        f_parallel = np.dot(self.vector, f_r) * self.vector
-        # dimer指向鞍点力
-        timer_alpha = 1  # self.timer的倍数
-        if self.c < 0:
-            f_to_saddle = f_r - f_parallel * 2  # 平行力反向
-            self.v = f_to_saddle
-            if np.linalg.norm(self.force(self.position - f_to_saddle * 0.01)) < np.linalg.norm(self.f_r):
-                # 后面是极值，需要跳出
-                value_list = [self.get_value(self.position),
-                              self.get_value(self.position + f_to_saddle * self.timer)]
-                m = 2
-                while m < 20:
-                    value_1 = self.get_value(self.position + f_to_saddle * (self.timer * m))
-                    if (value_list[-1] - value_list[-2]) * (value_1 - value_list[-1]) <= 0:
-                        break
-                    value_list.append(value_1)
-                    m += 2
-                timer_alpha = m
-            elif (np.abs(self.f_r) < 0.5).all():
-                # 鞍点附近, 一维线性搜索，步长调整
-                m = 1
-                force_list = []
-                force_list.append(self.f_r.copy())
-                while m <= 7:
-                    f_r_next = self.force(self.position + f_to_saddle * self.timer * m)
-                    force_list.append(f_r_next.copy())
-                    if np.linalg.norm(force_list[-1]) > np.linalg.norm(force_list[-2]) and m > 2:
-                        force_list.pop()
-                        break
-                    m += 2
-                m -= 2
-                self.f_r = force_list[-1]
-                timer_alpha = m
-
-            else:
-                timer_alpha = 1
-                if np.dot(self.v, f_to_saddle) > 0:
-                    self.v = f_to_saddle * (1 + np.dot(f_to_saddle, self.v) / np.dot(f_to_saddle, f_to_saddle))
-
-        else:
-            f_to_saddle = - f_parallel
-            self.v = f_to_saddle
-            # 一维搜索取值较小的的点
-            m = 11
-            value_now = self.get_value(self.position)
-            while True:
-                if value_now > self.get_value(self.position + f_to_saddle * self.timer * m) or m <= 2:
-                    break
-                m -= 2
-            timer_alpha = m
-
-        self.position += (self.v * self.timer * timer_alpha)
-        # 计算新点相关数据
-        self._update_f()
+            input('Find no translate method! ')
 
     def work(self):
         self._update_all()
@@ -290,10 +180,12 @@ class Dimer:
                         self.rotate(np.pi / 2)
                         continue
                     break
-            self.translate_v1()
+            self.translate()
             # 画出端点位置
+            plt.plot(self.position[0], self.position[1], 'ro')
             x1 = self.position + self.vector * self.r * 3
             plt.plot(x1[0], x1[1], 'bo')  # 画出点1位置
+            plt.show()
             times.append(j)
             if self.whether_print:
                 print('parallel force', np.dot(self.vector, self.f_r) * self.vector, '\n')
@@ -354,6 +246,128 @@ class Dimer:
         # plt.title('It rotates %d times and run %d times' % (sum(times), len(times)))
         # self.PES.show()
         return np.array(self.position_list), times, f_r_list, f_parallel_list, c_list
+
+    def _translate_v0(self):
+        """
+        移动dimer, 梯度下降法
+        """
+        self.angle = 0
+        # dimer合力
+        f_r = self.f_r
+        # dimer平行力
+        f_parallel = np.dot(self.vector, f_r) * self.vector
+        # dimer指向鞍点力
+        if self.c < 0:
+            f_to_saddle = f_r - f_parallel * 2  # 平行力反向
+        else:
+            f_to_saddle = - f_parallel
+        delta_v = f_to_saddle
+        # 速度调整
+        if np.dot(self.v, f_to_saddle) < 0:
+            self.v = delta_v
+        else:
+            delta_v_abs = np.dot(delta_v, delta_v)
+            if delta_v_abs < self.min_value:
+                self.v[:] = 0
+            else:
+                self.v = delta_v
+        self.position += (self.v * self.timer)
+        # 计算新点相关数据
+        self._update_f()
+
+    def _translate_v1(self):
+        """
+        移动dimer, 加速梯度下降法？
+        """
+        self.angle = 0
+        # dimer合力
+        f_r = self.f_r
+        # dimer平行力
+        f_parallel = np.dot(self.vector, f_r) * self.vector
+        # dimer指向鞍点力
+        if self.c < 0:
+            f_to_saddle = f_r - f_parallel * 2  # 平行力反向
+        else:
+            f_to_saddle = - f_parallel
+        # f_to_saddle = f_r - f_parallel * 2  这样会增加旋转，减少移动
+        delta_v = f_to_saddle
+        # 速度调整
+        if np.dot(self.v, f_to_saddle) < 0:
+            self.v = delta_v
+        else:
+            delta_v_abs = np.dot(delta_v, delta_v)
+            if delta_v_abs < self.min_value:
+                self.v[:] = 0
+            else:
+                self.v = delta_v * (1 + np.dot(delta_v, self.v) / np.dot(delta_v, delta_v))
+        self.position += (self.v * self.timer)
+        # 计算新点相关数据
+        self._update_f()
+
+    def _translate_v2(self):
+        """
+        移动dimer, 线性探测法
+        """
+        self.angle = 0
+        # dimer合力
+        f_r = self.f_r
+        # dimer平行力
+        f_parallel = np.dot(self.vector, f_r) * self.vector
+        # dimer指向鞍点力
+        timer_alpha = 1  # self.timer的倍数
+        if self.c < 0:
+            f_to_saddle = f_r - f_parallel * 2  # 平行力反向
+            self.v = f_to_saddle
+            f_r_next = self.force(self.position + f_to_saddle * self.timer)
+            if np.linalg.norm(f_r_next) > np.linalg.norm(self.f_r):
+                # 后面是极值，需要跳出
+                value_list = [self.get_value(self.position),
+                              self.get_value(self.position + f_to_saddle * self.timer)]
+                m = 2
+                while m < 20:
+                    value_1 = self.get_value(self.position + f_to_saddle * (self.timer * m))
+                    if (value_list[-1] - value_list[-2]) * (value_1 - value_list[-1]) <= 0:
+                        break
+                    value_list.append(value_1)
+                    m += 2
+                timer_alpha = m
+            elif (np.abs(self.f_r) < 0.3).all():
+                # 鞍点附近, 一维线性搜索，步长调整
+                m = 3
+                force_list = []
+                force_list.append(self.f_r.copy())
+                force_list.append(f_r_next)
+                while m <= 7:
+                    f_r_next = self.force(self.position + f_to_saddle * self.timer * m)
+                    force_list.append(f_r_next.copy())
+                    if np.linalg.norm(force_list[-1]) > np.linalg.norm(force_list[-2]) and m > 2:
+                        force_list.pop()
+                        break
+                    m += 2
+                m -= 2
+                self.f_r = force_list[-1]
+                timer_alpha = m
+
+            else:
+                timer_alpha = 1
+                if np.dot(self.v, f_to_saddle) > 0:
+                    self.v = f_to_saddle * (1 + np.dot(f_to_saddle, self.v) / np.dot(f_to_saddle, f_to_saddle))
+
+        else:
+            f_to_saddle = - f_parallel
+            self.v = f_to_saddle
+            # 一维搜索取值较小的的点
+            m = 11
+            value_now = self.get_value(self.position)
+            while True:
+                if value_now > self.get_value(self.position + f_to_saddle * self.timer * m) or m <= 2:
+                    break
+                m -= 2
+            timer_alpha = m
+
+        self.position += (self.v * self.timer * timer_alpha)
+        # 计算新点相关数据
+        self._update_f()
 
     def _update_c(self):
         """
@@ -485,7 +499,7 @@ class DimerRo(Dimer):
                 # 垂直力大小
                 if np.linalg.norm(self.vertical_force(self.f1 - self.f2, self.vector)) < self.min_vertical_force:
                     break
-            self.translate_v1()
+            self._translate_v1()
             print('end\n')
             plt.plot(self.position[0], self.position[1], 'ro')
             x1 = self.position + self.vector * self.r
@@ -535,9 +549,21 @@ class DimerQs(Dimer):
         position_now = self.position + self.vector * self.r
         self._update_bk(position_pre, force_pre, position_now, self.f1.copy())
 
-    def translate_v2(self):
+    def translate(self, method=0):
+        if method == 0:
+            return self._translate_v0()
+        elif method == 1:
+            return self._translate_v1()
+        elif method == 2:
+            return self._translate_v2()
+        elif method == 3:
+            return self._translate_v3()
+        else:
+            input('Find no translate method! ')
+
+    def _translate_v3(self):
         """
-        移动dimer, BFGS法，不太对
+        移动dimer, BFGS法
         """
         self.angle = 0
         # dimer合力
@@ -556,8 +582,8 @@ class DimerQs(Dimer):
         translate_length = np.linalg.norm(self.bk.dot(self.f_r.reshape((-1, 1))).flatten())
         if 4 < len(self.position_list) and translate_length > self.timer \
                 and translate_length < 5 * self.timer:
-            # self.position += self.bk.dot(self.f_r).flatten()
             self.position += translate_length * delta_v
+            # self.position += self.bk.dot(self.f_r).flatten()
         else:
             self.position += delta_v * self.timer
 
@@ -582,7 +608,7 @@ class DimerQs(Dimer):
                         self.rotate(np.pi / 2)
                         continue
                     break
-            self.translate_v2()
+            self.translate(3)
             # 画出端点位置
             plt.plot(self.position[0], self.position[1], 'ro')
             x1 = self.position + self.vector * self.r * 3
