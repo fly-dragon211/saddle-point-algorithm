@@ -6,8 +6,8 @@
 # @Desc  : 修改后结合高斯程序的dimer算法
 
 
-
 import numpy as np
+import pandas as pd
 import os
 import re
 import time
@@ -18,7 +18,7 @@ from newton import Newton
 
 class GaussianFile:
     """
-    gaussian文件处理
+    gaussian文件处理，必须为笛卡尔坐标，分子字母大写
     """
     def __init__(self):
         self.cal_num = [0, 0]  # the number of energy and gradient
@@ -88,7 +88,7 @@ class GaussianFile:
             print('文件不存在! :', file_path)
             return
         # 修改电荷数和自旋多重度
-        p = re.compile(r'\n(\d \d\n)')
+        p = re.compile(r'\n(-?\d \d\n)')
         electron = p.findall(text)
         if len(electron) > 1:
             input('有多个自旋多重度。')
@@ -244,9 +244,10 @@ class DimerGaussian(DimerQs):
         super().__init__(PES, n, ini_position,
                  ini_vector, ini_velocity,
                  whether_print)
-        self.min_vertical_force = 0.02  # 旋转力收敛值
+        self.min_vertical_force = 0.01  # 旋转力收敛值
         self.min_value = 1e-20
-        self.timer = 0.03  # dimer步进时间
+        self.timer = 0.02  # dimer步进时间
+        self.deltax_max = 0.3
         self.n = n
         self.r = 0.005
 
@@ -266,7 +267,7 @@ class DimerGaussian(DimerQs):
         self._update_all()
         # 旋转到曲率最小
         times = []
-        for i in range(30):
+        for i in range(32):
             pre_c = self.c
             for j in range(20):
                 rotate_angle = self.get_rotate_angle()
@@ -346,7 +347,7 @@ class DimerRoGaussian(DimerRo):
                 # 旋转角度小于某个值
                 if np.abs(rotate_angle) < np.pi/180 * 5:
                     break
-            self.translate_v3()
+            self.translate(3)
             times.append(j)
             # 把移动后的分子存储起来
             self.PES.generate_input(result_path + 'test_dimer' + str(i) + '.gjf', self.position.reshape((-1, 3)),
@@ -455,15 +456,18 @@ def baker_test_dimer(result_folder_path, cal_method=0):
         d = DimerGaussian(g, ini_position.size, ini_position=ini_position)
         cal_time_begin = time.time()
         times_d = d.work(cal_method=cal_method)
+        if len(times_d) >= 30:
+            g.cal_num[1] = 1000
 
         cal_time.append(time.time()-cal_time_begin)
         cal_nums.append(g.cal_num.copy())
         # 存储信息到 result.txt
         with open(result_folder_path+'run_result.txt', 'a+') as f:
-            f.write(str(g.cal_num) + '\n')
-            f.write(str(i)+' '*2 + 'Dimer rotates %d times, run %d times. %f second. E_final %f\n '
+            f.write(str(i) + ' ' * 2 + 'Dimer rotates %d times, run %d times. %f second. E_final %f\n '
                     % (sum(times_d), len(times_d), cal_time[-1], d.get_value(d.position)))
-
+            g.cal_num[0] -= 1
+            f.write('energy and gradient cal:' + str(g.cal_num) +
+                    ' translate situation:' + str(d.translate_situation) + '\n'*2)
 
     with open(result_folder_path+'result.txt', 'a+') as f:
         f.write('# method: v' + str(cal_method) + '\n')
@@ -522,8 +526,15 @@ def my_test():
 
 if __name__ == '__main__':
     matrix_result = []
-    result_folder = r'D:\graduate_project\transition_state\result' + '\\'
-    for cal_method in range(1, 4):
+    result_folder = r'D:\graduate_project\transition_state\result_3' + '\\'
+    for cal_method in range(3, 4):
         cal_nums = baker_test_dimer(result_folder, cal_method)
         cal_nums = np.array(cal_nums)
         matrix_result.append(cal_nums)
+
+    # write the data to excel
+    writer = pd.ExcelWriter(result_folder + 'temp.xlsx')
+    for i in range(1):
+        a_df = pd.DataFrame(matrix_result[i])
+        a_df.to_excel(writer, str(i + 1), float_format='%d')
+    writer.save()

@@ -9,6 +9,7 @@
 """
 
 import numpy as np
+import pandas as pd
 from simplesurface import SimpleSurface
 import matplotlib.pyplot as plt
 import random
@@ -47,7 +48,9 @@ class Dimer:
         # 曲率
         self.c = 0
         self.delta_angle = np.pi / 180
-        self.timer = 0.06  # dimer步进时间
+        self.timer = 0.05  # dimer步进时间
+        self.deltax_max = 0.2
+        self.translate_situation = [0, 0, 0, 0]  # 各种移动情况计算次数
         self.bk = np.eye(n)  # Hessian矩阵近似
         self.angle = 0
         self.position_list = []
@@ -261,16 +264,7 @@ class Dimer:
             f_to_saddle = f_r - f_parallel * 2  # 平行力反向
         else:
             f_to_saddle = - f_parallel
-        delta_v = f_to_saddle
-        # 速度调整
-        if np.dot(self.v, f_to_saddle) < 0:
-            self.v = delta_v
-        else:
-            delta_v_abs = np.dot(delta_v, delta_v)
-            if delta_v_abs < self.min_value:
-                self.v[:] = 0
-            else:
-                self.v = delta_v
+        self.v = f_to_saddle
         self.position += (self.v * self.timer)
         # 计算新点相关数据
         self._update_f()
@@ -286,8 +280,10 @@ class Dimer:
         f_parallel = np.dot(self.vector, f_r) * self.vector
         # dimer指向鞍点力
         if self.c < 0:
+            self.translate_situation[0] += 1
             f_to_saddle = f_r - f_parallel * 2  # 平行力反向
         else:
+            self.translate_situation[1] += 1
             f_to_saddle = - f_parallel
         # f_to_saddle = f_r - f_parallel * 2  这样会增加旋转，减少移动
         delta_v = f_to_saddle
@@ -320,27 +316,22 @@ class Dimer:
             self.v = f_to_saddle
             f_r_next = self.force(self.position + f_to_saddle * self.timer)
             if np.linalg.norm(f_r_next) > np.linalg.norm(self.f_r):
+                self.translate_situation[0] += 1
                 # 后面是极值，需要跳出
-                value_list = [self.get_value(self.position),
-                              self.get_value(self.position + f_to_saddle * self.timer)]
-                m = 2
-                while m < 20:
-                    value_1 = self.get_value(self.position + f_to_saddle * (self.timer * m))
-                    if (value_list[-1] - value_list[-2]) * (value_1 - value_list[-1]) <= 0:
-                        break
-                    value_list.append(value_1)
-                    m += 2
-                timer_alpha = m
-            elif (np.abs(self.f_r) < 0.3).all():
+                timer_alpha = self.__get_m_translate_jump(f_to_saddle)
+            elif (np.abs(self.f_r) < 0.16).all():
+                self.translate_situation[1] += 1
                 # 鞍点附近, 一维线性搜索，步长调整
                 m = 3
                 force_list = []
                 force_list.append(self.f_r.copy())
                 force_list.append(f_r_next)
                 while m <= 7:
+                    if (np.abs(force_list[-1]) < 0.1).all():
+                        break
                     f_r_next = self.force(self.position + f_to_saddle * self.timer * m)
                     force_list.append(f_r_next.copy())
-                    if np.linalg.norm(force_list[-1]) > np.linalg.norm(force_list[-2]) and m > 2:
+                    if np.linalg.norm(force_list[-1]) > np.linalg.norm(force_list[-2]) :
                         force_list.pop()
                         break
                     m += 2
@@ -349,25 +340,38 @@ class Dimer:
                 timer_alpha = m
 
             else:
+                self.translate_situation[2] += 1
                 timer_alpha = 1
                 if np.dot(self.v, f_to_saddle) > 0:
                     self.v = f_to_saddle * (1 + np.dot(f_to_saddle, self.v) / np.dot(f_to_saddle, f_to_saddle))
 
         else:
+            self.translate_situation[3] += 1
             f_to_saddle = - f_parallel
             self.v = f_to_saddle
-            # 一维搜索取值较小的的点
-            m = 11
-            value_now = self.get_value(self.position)
-            while True:
-                if value_now > self.get_value(self.position + f_to_saddle * self.timer * m) or m <= 2:
-                    break
-                m -= 2
-            timer_alpha = m
+            # 一维搜索跳出该区域
+            timer_alpha = self.__get_m_translate_jump(f_to_saddle)
 
         self.position += (self.v * self.timer * timer_alpha)
         # 计算新点相关数据
         self._update_f()
+        return
+
+    def __get_m_translate_jump(self, f_to_saddle):
+        """
+        跳出极值区域，返回步进时间的倍数
+        """
+        value_list = [self.get_value(self.position),
+                      self.get_value(self.position + f_to_saddle * self.timer)]
+        m = 2
+        while m < 12:
+            value_1 = self.get_value(self.position + f_to_saddle * (self.timer * m))
+            if (value_list[-1] - value_list[-2]) * (value_1 - value_list[-1]) <= 0:
+                break
+            value_list.append(value_1)
+            m += 2
+        return m
+
 
     def _update_c(self):
         """
@@ -544,7 +548,7 @@ class DimerQs(Dimer):
         # 计算曲率
         self._update_c()
         # 更新bk
-        if np.abs(angle) > np.pi / 4:  # 旋转太大，self.bk不更新
+        if np.abs(angle) > np.pi / 2.5:  # 旋转太大，self.bk不更新
             return
         position_now = self.position + self.vector * self.r
         self._update_bk(position_pre, force_pre, position_now, self.f1.copy())
@@ -580,18 +584,26 @@ class DimerQs(Dimer):
         position_pre = self.position.copy()
         force_pre = self.f_r.copy()
         translate_length = np.linalg.norm(self.bk.dot(self.f_r.reshape((-1, 1))).flatten())
-        if 4 < len(self.position_list) and translate_length > self.timer \
-                and translate_length < 5 * self.timer:
+        f_bk = -self.bk.dot(self.f_r).flatten()  # 拟牛顿指向力
+        if translate_length > self.deltax_max:
+            translate_length = self.deltax_max
+        if self.timer < translate_length and \
+                self.translate_situation[1] >= 1:
             self.position += translate_length * delta_v
-            # self.position += self.bk.dot(self.f_r).flatten()
+            self.translate_situation[0] += 1
         else:
-            self.position += delta_v * self.timer
+            self.translate_situation[1] += 1
+            if np.dot(self.v, delta_v) > 0:
+                self.v = delta_v * (1 + np.dot(delta_v, self.v) / np.dot(delta_v, delta_v))
+            else:
+                self.v = delta_v
+            self.position += self.v * self.timer
 
         # 计算新点相关数据
         self._update_f()
         self._update_bk(position_pre, force_pre, self.position.copy(), self.f_r.copy())
 
-    def work(self):
+    def work(self, cal_method=0):
         self._update_all()
         # 旋转到曲率最小
         rotate_times = []
@@ -608,7 +620,7 @@ class DimerQs(Dimer):
                         self.rotate(np.pi / 2)
                         continue
                     break
-            self.translate(3)
+            self.translate(cal_method)
             # 画出端点位置
             plt.plot(self.position[0], self.position[1], 'ro')
             x1 = self.position + self.vector * self.r * 3
@@ -658,7 +670,7 @@ def atest_1():
         d = DimerQs(PES, 2, ini_position, ini_vector, whether_print=True)
         d.PES.show_surface_2d(-0.5, 0.5)
         # d.PES.show_surface_2d(-5, 5)
-        position_d, times_d = d.work()  # 得到dimer运行轨迹和每一次的旋转数
+        position_d, times_d = d.work(0)  # 得到dimer运行轨迹和每一次的旋转数
         d.PES.show_point_2d(position_d)
 
         plt.title('Dimer rotates %d times and run %d times \n '
@@ -717,6 +729,29 @@ def atest_extreme():
         # plt.plot(f_r_list)
 
 
+def data_to_excel(data_in):
+    # prepare for data
+    data = np.array(data_in)
+    data_df = pd.DataFrame(data)
+
+    # change the index and column name
+    data_df.columns = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J']
+    data_df.index = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j']
+
+    # create and writer pd.DataFrame to excel
+    writer = pd.ExcelWriter('Save_Excel.xlsx')
+    data_df.to_excel(writer, 'page_2', float_format='%d')  # float_format 控制精度
+    writer.save()  # 如果有同名文件，该操作会覆盖原文件
+
 if __name__ == "__main__":
     # atest_extreme1()
-    atest_1()
+    # atest_1()
+    a1 = np.arange(0, 6).reshape((-1, 2))
+    a2 = np.arange(3, 9).reshape((-1, 2))
+    a = np.array([a1, a2])
+    writer = pd.ExcelWriter('temp.xlsx')
+    for i in range(2):
+        a_df = pd.DataFrame(a[i])
+        a_df.to_excel(writer, str(i+1), float_format='%d')
+    writer.save()
+
