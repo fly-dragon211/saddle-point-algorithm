@@ -76,14 +76,16 @@ class SimpleSurface():
     def show_point_2d(self, x, color='ro'):
         plt.plot(x[:, 0], x[:, 1], color)
         plt.plot(x[-1, 0], x[-1, 1], 'k*')
-        plt.annotate('start point', xy=(x[0, 0], x[0, 1]))
-        plt.annotate('end point', xy=(x[-1, 0], x[-1, 1]))
+        plt.annotate('Start Point', xy=(x[0, 0], x[0, 1]), fontsize=15, color='w')
+        plt.annotate('TS', xy=(x[-1, 0], x[-1, 1]), fontsize=15, color='w')
 
     def show_surface_2d(self, x_min, x_max):
         # 建立步长为0.01，即每隔0.01取一个点
         step = 0.01
         x = np.arange(x_min, x_max, step)
         y = np.arange(x_min, x_max, step)
+        plt.annotate('IS', xy=(-0.48, 0), fontsize=20, color='w')
+        plt.annotate('FS', xy=(0.43, 0), fontsize=20, color='w')
         # 也可以用x = np.linspace(-10,10,100)表示从-10到10，分100份
 
         # 将原始数据变成网格数据形式

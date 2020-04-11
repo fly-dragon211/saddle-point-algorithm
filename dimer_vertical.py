@@ -670,7 +670,7 @@ def atest_1():
         d = DimerQs(PES, 2, ini_position, ini_vector, whether_print=True)
         d.PES.show_surface_2d(-0.5, 0.5)
         # d.PES.show_surface_2d(-5, 5)
-        position_d, times_d = d.work(0)  # 得到dimer运行轨迹和每一次的旋转数
+        position_d, times_d = d.work(2)  # 得到dimer运行轨迹和每一次的旋转数
         d.PES.show_point_2d(position_d)
 
         plt.title('Dimer rotates %d times and run %d times \n '
@@ -745,13 +745,4 @@ def data_to_excel(data_in):
 
 if __name__ == "__main__":
     # atest_extreme1()
-    # atest_1()
-    a1 = np.arange(0, 6).reshape((-1, 2))
-    a2 = np.arange(3, 9).reshape((-1, 2))
-    a = np.array([a1, a2])
-    writer = pd.ExcelWriter('temp.xlsx')
-    for i in range(2):
-        a_df = pd.DataFrame(a[i])
-        a_df.to_excel(writer, str(i+1), float_format='%d')
-    writer.save()
-
+    atest_1()
