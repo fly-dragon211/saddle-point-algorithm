@@ -314,62 +314,55 @@ class Dimer:
         if self.c < 0:
             f_to_saddle = f_r - f_parallel * 2  # 平行力反向
             self.v = f_to_saddle
-            f_r_next = self.force(self.position + f_to_saddle * self.timer)
-            if np.linalg.norm(f_r_next) > np.linalg.norm(self.f_r):
-                self.translate_situation[0] += 1
-                # 后面是极值，需要跳出
-                timer_alpha = self.__get_m_translate_jump(f_to_saddle)
-            elif (np.abs(self.f_r) < 0.16).all():
+            if (np.abs(self.f_r) < 0.16).all():
+                f_r_next = self.force(self.position + f_to_saddle * self.timer)
                 self.translate_situation[1] += 1
                 # 鞍点附近, 一维线性搜索，步长调整
-                m = 3
+                m = 1
                 force_list = []
                 force_list.append(self.f_r.copy())
                 force_list.append(f_r_next)
                 while m <= 7:
                     if (np.abs(force_list[-1]) < 0.1).all():
                         break
+                    m *= 2
                     f_r_next = self.force(self.position + f_to_saddle * self.timer * m)
                     force_list.append(f_r_next.copy())
-                    if np.linalg.norm(force_list[-1]) > np.linalg.norm(force_list[-2]) :
+                    if np.linalg.norm(force_list[-1]) > np.linalg.norm(force_list[-2]):
                         force_list.pop()
+                        m /= 2
                         break
-                    m += 2
-                m -= 2
                 self.f_r = force_list[-1]
                 timer_alpha = m
-
             else:
                 self.translate_situation[2] += 1
-                timer_alpha = 1
-                if np.dot(self.v, f_to_saddle) > 0:
-                    self.v = f_to_saddle * (1 + np.dot(f_to_saddle, self.v) / np.dot(f_to_saddle, f_to_saddle))
+                timer_alpha = self.__get_m_translate_jump(f_to_saddle)
 
         else:
             self.translate_situation[3] += 1
             f_to_saddle = - f_parallel
             self.v = f_to_saddle
             # 一维搜索跳出该区域
-            timer_alpha = self.__get_m_translate_jump(f_to_saddle)
+            timer_alpha = self.__get_m_translate_jump(f_to_saddle, 3)
 
         self.position += (self.v * self.timer * timer_alpha)
         # 计算新点相关数据
         self._update_f()
         return
 
-    def __get_m_translate_jump(self, f_to_saddle):
+    def __get_m_translate_jump(self, f_to_saddle, delta_m=2):
         """
         跳出极值区域，返回步进时间的倍数
         """
         value_list = [self.get_value(self.position),
                       self.get_value(self.position + f_to_saddle * self.timer)]
-        m = 2
-        while m < 12:
-            value_1 = self.get_value(self.position + f_to_saddle * (self.timer * m))
+        m = 1
+        while m < 15:
+            value_1 = self.get_value(self.position + f_to_saddle * self.timer * (m + delta_m))
             if (value_list[-1] - value_list[-2]) * (value_1 - value_list[-1]) <= 0:
                 break
             value_list.append(value_1)
-            m += 2
+            m += delta_m
         return m
 
 
@@ -674,7 +667,7 @@ def atest_1():
         d.PES.show_point_2d(position_d)
 
         plt.title('Dimer rotates %d times and run %d times \n '
-                  % (sum(times_d), len(times_d)))
+                  % (sum(times_d), len(times_d)) + str(d.translate_situation))
         print('\n')
 
         x1 = d.position + d.vector * d.r

@@ -527,7 +527,7 @@ def my_test():
 if __name__ == '__main__':
     matrix_result = []
     result_folder = r'D:\graduate_project\transition_state\result_3' + '\\'
-    for cal_method in range(3, 4):
+    for cal_method in range(2, 3):
         cal_nums = baker_test_dimer(result_folder, cal_method)
         cal_nums = np.array(cal_nums)
         matrix_result.append(cal_nums)
