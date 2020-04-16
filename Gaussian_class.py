@@ -21,7 +21,7 @@ class GaussianFile:
     gaussian文件处理，必须为笛卡尔坐标，分子字母大写
     """
     def __init__(self):
-        self.cal_num = [0, 0]  # the number of energy and gradient
+        self.cal_num = [0, 0]  # the calculate number of energy and gradient
         self.elements = []
         # out文件，Force比较复杂代码在下面
         self.pattern_spe = re.compile(r'SCF Done:  E\(.+?\) =(.+?)A.U')
@@ -30,7 +30,7 @@ class GaussianFile:
         self.pattern_elements = re.compile(r'([A-Z][a-z]?) *?-?\d\.\d{8}')
         self.file_head = ['%mem=500MB\n',
                           '%nprocshared=4\n',
-                          '#p force pm6\n',
+                          '#p force pm6 scf=xqc\n',
                           '\n',
                           'title\n',
                           '\n']
@@ -263,24 +263,24 @@ class DimerGaussian(DimerQs):
         """
         return self.PES.get_force(position)
 
-    def work(self, result_path='', cal_method=0):
+    def work(self, result_path='', cal_method=0, translate_time_max=30):
         self._update_all()
         # 旋转到曲率最小
         times = []
-        for i in range(32):
+        for i in range(translate_time_max):
             pre_c = self.c
-            for j in range(20):
-                rotate_angle = self.get_rotate_angle()
-                self.rotate(rotate_angle)
+            for j in range(0, 20):
                 if self.whether_print:
                     print('rotated force: ', np.linalg.norm(self.f_vertical))
                 self.store_information()  # 存储dimer信息
                 # 垂直力大小
-                if np.linalg.norm(self.vertical_force(self.f1 - self.f2, self.vector)) < self.min_vertical_force:
+                if np.linalg.norm(self.vertical_force(self.f1 - self.f2, self.vector)) < self.min_vertical_force and j>0:
                     if self.c > pre_c and self.c > 0:  # 如果曲率上升，旋转pi/2 + angle, 重要
                         self.rotate(np.pi / 2)
                         continue
                     break
+                rotate_angle = self.get_rotate_angle()
+                self.rotate(rotate_angle)
             self.translate(cal_method)
             times.append(j)
             # 把移动后的分子存储起来
@@ -336,7 +336,7 @@ class DimerRoGaussian(DimerRo):
         times = []
         for i in range(200):
             pre_c = self.c
-            for j in range(20):
+            for j in range(1, 20):
                 rotate_angle = self.get_rotate_angle()
                 self.rotate(rotate_angle)
                 self.store_information(rotate_angle)  # 存储dimer信息
@@ -438,9 +438,9 @@ def mkdir(path):
         print("---  new folder...  ---")
 
 
-def baker_test_dimer(result_folder_path, cal_method=0):
+def baker_test_dimer(baker_folder_path, result_folder_path, cal_method=0):
+    translate_time_max = 40
     np.random.seed(2)
-    baker_folder_path = r'D:\graduate_project\transition_state\saddle-point-algorithm\baker_molcule' + '\\'
     mkdir(result_folder_path)
     cal_nums = []
     cal_time = []
@@ -455,12 +455,13 @@ def baker_test_dimer(result_folder_path, cal_method=0):
         # 算法测试
         d = DimerGaussian(g, ini_position.size, ini_position=ini_position)
         cal_time_begin = time.time()
-        times_d = d.work(cal_method=cal_method)
-        if len(times_d) >= 30:
+        times_d = d.work(cal_method=cal_method, translate_time_max=translate_time_max)
+        if len(times_d) >= translate_time_max - 1:
             g.cal_num[1] = 1000
 
         cal_time.append(time.time()-cal_time_begin)
         cal_nums.append(g.cal_num.copy())
+        cal_nums[-1].append(float(d.get_value(d.position)))  # 记录计算过渡态能量
         # 存储信息到 result.txt
         with open(result_folder_path+'run_result.txt', 'a+') as f:
             f.write(str(i) + ' ' * 2 + 'Dimer rotates %d times, run %d times. %f second. E_final %f\n '
@@ -505,7 +506,6 @@ def baker_test_Newton():
                     % (k, cal_time[-1]))
 
     with open(result_folder_path+'result.txt', 'a+') as f:
-
         f.write(str(cal_nums))
 
     return cal_nums
@@ -526,15 +526,16 @@ def my_test():
 
 if __name__ == '__main__':
     matrix_result = []
+    baker_folder = r'D:\graduate_project\transition_state\saddle-point-algorithm\baker_molcule' + '\\'
     result_folder = r'D:\graduate_project\transition_state\result_3' + '\\'
-    for cal_method in range(2, 3):
-        cal_nums = baker_test_dimer(result_folder, cal_method)
-        cal_nums = np.array(cal_nums)
+    for cal_method in range(1, 4):
+        cal_nums = baker_test_dimer(baker_folder, result_folder, cal_method)
+        cal_nums = np.array(cal_nums, dtype=np.float)
         matrix_result.append(cal_nums)
 
     # write the data to excel
     writer = pd.ExcelWriter(result_folder + 'temp.xlsx')
     for i in range(1):
         a_df = pd.DataFrame(matrix_result[i])
-        a_df.to_excel(writer, str(i + 1), float_format='%d')
+        a_df.to_excel(writer, str(i + 1), float_format='%f')
     writer.save()
