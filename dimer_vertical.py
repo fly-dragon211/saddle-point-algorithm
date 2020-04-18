@@ -276,7 +276,6 @@ class Dimer:
                 # 后面是极值，需要跳出
                 timer_m = self.__get_m_translate_jump(f_to_saddle)
             elif (np.abs(self.f_r) < 0.16).all():
-                f_r_next = self.force(self.position + f_to_saddle * self.timer)
                 self.translate_situation[1] += 1
                 # 鞍点附近, 一维线性搜索，步长调整
                 m = 1
@@ -319,9 +318,9 @@ class Dimer:
         """
         value_list = [self.get_value(self.position),
                       self.get_value(self.position + f_to_saddle * self.timer)]
-        m = 2
+        m = 1
         while m < 12:
-            value_1 = self.get_value(self.position + f_to_saddle * self.timer * m)
+            value_1 = self.get_value(self.position + f_to_saddle * self.timer * (m+delta_m))
             if (value_list[-1] - value_list[-2]) * (value_1 - value_list[-1]) <= 0:
                 break
             value_list.append(value_1)
@@ -662,10 +661,10 @@ def atest_1():
         position_d, times_d = d.work(2)  # 得到dimer运行轨迹和每一次的旋转数
         d.PES.show_point_2d(position_d)
 
-        # plt.title('Dimer rotates %d times and run %d times \n '
-        #           % (sum(times_d), len(times_d)) + str(d.translate_situation))
         plt.title('Dimer rotates %d times and run %d times \n '
-                  % (sum(times_d), len(times_d)))
+                  % (sum(times_d), len(times_d)) + str(d.translate_situation))
+        # plt.title('Dimer rotates %d times and run %d times \n '
+        #           % (sum(times_d), len(times_d)))
         print('\n')
 
         x1 = d.position + d.vector * d.r

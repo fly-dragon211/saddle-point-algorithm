@@ -444,7 +444,7 @@ def baker_test_dimer(baker_folder_path, result_folder_path, cal_method=0):
     mkdir(result_folder_path)
     cal_nums = []
     cal_time = []
-    for i in range(1, 26):
+    for i in range(1, 21):
         baker_path = baker_folder_path + str(i)
         result_path = result_folder_path + str(i)
         # 进入result/i文件夹，不存在则创建
@@ -528,14 +528,14 @@ if __name__ == '__main__':
     matrix_result = []
     baker_folder = r'D:\graduate_project\transition_state\saddle-point-algorithm\baker_molcule' + '\\'
     result_folder = r'D:\graduate_project\transition_state\result_3' + '\\'
-    for cal_method in range(1, 4):
+    for cal_method in range(0, 4):
         cal_nums = baker_test_dimer(baker_folder, result_folder, cal_method)
         cal_nums = np.array(cal_nums, dtype=np.float)
         matrix_result.append(cal_nums)
 
     # write the data to excel
     writer = pd.ExcelWriter(result_folder + 'temp.xlsx')
-    for i in range(1):
+    for i in range(4):
         a_df = pd.DataFrame(matrix_result[i])
         a_df.to_excel(writer, str(i + 1), float_format='%f')
     writer.save()
