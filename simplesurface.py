@@ -32,8 +32,7 @@ class SimpleSurface():
         self.cal_num[1] += 1
         x = position
         # return np.array([np.cos(x[0]), np.cos(x[1])])
-        return np.array([4*x[0]**3 + 8*x[0]*x[1]**2 - 4*x[0],
-                         8*x[0]**2*x[1] + 4*x[1]])
+        return np.array([4*x[0]**3 + 8*x[0]*x[1]**2 - 4*x[0], 8*x[0]**2*x[1] + 4*x[1]])
 
     def get_hess(self, position):
         """

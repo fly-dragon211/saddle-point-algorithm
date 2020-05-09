@@ -49,7 +49,7 @@ class Dimer:
         self.c = 0
         self.delta_angle = np.pi / 180
         self.timer = 0.05  # dimer步进时间
-        self.deltax_max = 0.2
+        self.timer_max = 0.2
         self.translate_situation = [0, 0, 0, 0]  # 各种移动情况计算次数
         self.bk = np.eye(n)  # Hessian矩阵近似
         self.angle = 0
@@ -179,7 +179,7 @@ class Dimer:
                 if self.whether_print:
                     print('rotated force: ', np.linalg.norm(self.f_vertical))
                 # 垂直力大小
-                if np.linalg.norm(self.vertical_force(self.f1 - self.f2, self.vector)) < self.min_vertical_force:
+                if np.linalg.norm(self.vertical_force(self.f1 - self.f2, self.vector)) < self.min_vertical_force and j>0:
                     if self.c > pre_c and self.c > 0:  # 如果曲率上升，旋转pi/2 + angle, 重要
                         self.rotate(np.pi / 2)
                         continue
@@ -189,10 +189,11 @@ class Dimer:
             self.translate(cal_method)
             # 画出端点位置
             plt.plot(self.position[0], self.position[1], 'ro')
-            x1 = self.position + self.vector * self.r * 3
+            x1 = self.position + self.vector * self.r * 8
+            x2 = self.position - self.vector * self.r * 8
             plt.plot(x1[0], x1[1], 'bo')  # 画出点1位置
+            plt.plot(x2[0], x2[1], 'bo')  # 画出点1位置
             plt.show()
-            rotate_times.append(j)
 
             f_r_list.append(np.linalg.norm(self.f_r))
             f_parallel_list.append(np.linalg.norm(np.dot(self.vector, self.f_r) * self.vector, ord=1))
@@ -285,27 +286,31 @@ class Dimer:
                 while m <= 10:
                     if (np.abs(force_list[-1]) < 0.1).all():
                         break
-                    m += 2
-                    f_r_next = self.force(self.position + f_to_saddle * self.timer * m)
+                    f_r_next = self.force(self.position + f_to_saddle * self.timer * (m+1+m/2))
                     force_list.append(f_r_next.copy())
                     if np.linalg.norm(force_list[-1]) > np.linalg.norm(force_list[-2]):
                         force_list.pop()
                         m -= 2
                         break
+                    m += 1+m/2
                 self.f_r = force_list[-1]
                 timer_m = m
             else:
                 self.translate_situation[2] += 1
+                # 一维搜索跳出
                 timer_m = self.__get_m_translate_jump(f_to_saddle)
             if timer_m == 1:  # 可以减少一次梯度计算
                 self.f_r = f_r_next
 
         else:
+            # 曲率大于0，受力较大，加速向前
             self.translate_situation[3] += 1
             f_to_saddle = - f_parallel
-            self.v = f_to_saddle
-            # 一维搜索跳出该区域
-            timer_m = self.__get_m_translate_jump(f_to_saddle)
+            if np.dot(self.v, f_to_saddle) < 0:
+                self.v = f_to_saddle
+            else:
+                delta_v_abs = np.dot(f_to_saddle, f_to_saddle)
+                self.v = f_to_saddle * (1 + np.dot(f_to_saddle, self.v) / delta_v_abs)
 
         self.position += (self.v * self.timer * timer_m)
         # 计算新点相关数据
@@ -319,9 +324,9 @@ class Dimer:
         value_list = [self.get_value(self.position),
                       self.get_value(self.position + f_to_saddle * self.timer)]
         m = 1
-        while m < 12:
+        while m < 13:
             value_1 = self.get_value(self.position + f_to_saddle * self.timer * (m+delta_m))
-            if (value_list[-1] - value_list[-2]) * (value_1 - value_list[-1]) <= 0:
+            if (value_list[1] - value_list[0]) * (value_1 - value_list[-1]) <= 0:
                 break
             value_list.append(value_1)
             m += delta_m
@@ -538,13 +543,13 @@ class DimerQs(Dimer):
 
         position_pre = self.position.copy()
         force_pre = self.f_r.copy()
-        translate_length = np.linalg.norm(self.bk.dot(self.f_r.reshape((-1, 1))).flatten())
+        translate_timer = np.linalg.norm(self.bk.dot(self.f_r.reshape((-1, 1))).flatten())
         f_bk = -self.bk.dot(self.f_r).flatten()  # 拟牛顿指向力
-        if translate_length > self.deltax_max:
-            translate_length = self.deltax_max
-        if self.timer < translate_length and \
+        if translate_timer > self.timer_max:
+            translate_timer = self.timer_max
+        if self.timer < translate_timer and \
                 self.translate_situation[1] >= 1:
-            self.position += translate_length * delta_v
+            self.position += translate_timer * delta_v
             self.translate_situation[0] += 1
         else:
             self.translate_situation[1] += 1
@@ -578,8 +583,8 @@ class DimerQs(Dimer):
         force_pre = self.f_r.copy()
         translate_length = np.linalg.norm(self.bk.dot(self.f_r.reshape((-1, 1))).flatten())
         f_bk = -self.bk.dot(self.f_r).flatten()  # 拟牛顿指向力
-        if self.translate_situation[1] > 1:
-            self.position += translate_length * delta_v * 0.5
+        if self.translate_situation[1] >= 1:
+            self.position += translate_length * delta_v / np.linalg.norm(delta_v)
             self.translate_situation[0] += 1
         else:
             self.translate_situation[1] += 1
@@ -592,6 +597,7 @@ class DimerQs(Dimer):
 
     def work(self, cal_method=0):
         self._update_all()
+        self.position_list.append(self.position.copy())
         # 旋转到曲率最小
         rotate_times = []
         for i in range(120):
@@ -607,12 +613,15 @@ class DimerQs(Dimer):
                     break
                 rotate_angle = self.get_rotate_angle()
                 self.rotate(rotate_angle)
-            self.translate(cal_method)
             # 画出端点位置
-            plt.plot(self.position[0], self.position[1], 'ro')
             x1 = self.position + self.vector * self.r * 3
+            x2 = self.position - self.vector * self.r * 3
             plt.plot(x1[0], x1[1], 'bo')  # 画出点1位置
+            plt.plot(x2[0], x2[1], 'bo')  # 画出点1位置
+            plt.plot(self.position[0], self.position[1], 'ro')
             plt.show()
+            # 移动dimer
+            self.translate(cal_method)
             rotate_times.append(j)
             # print('The difference between B and H', np.sum(np.abs(self.bk - self.PES.get_hess(self.position))))
             print('Bk: ', self.bk)
@@ -661,10 +670,10 @@ def atest_1():
         position_d, times_d = d.work(2)  # 得到dimer运行轨迹和每一次的旋转数
         d.PES.show_point_2d(position_d)
 
-        plt.title('Dimer rotates %d times and run %d times \n '
-                  % (sum(times_d), len(times_d)) + str(d.translate_situation))
         # plt.title('Dimer rotates %d times and run %d times \n '
-        #           % (sum(times_d), len(times_d)))
+        #           % (sum(times_d), len(times_d)) + str(d.translate_situation))
+        plt.title('Dimer rotates %d times and run %d times \n '
+                  % (sum(times_d), len(times_d)))
         print('\n')
 
         x1 = d.position + d.vector * d.r
@@ -672,11 +681,11 @@ def atest_1():
 
 
 def atest_extreme1():
-    # 第二个函数极端情况（极大极小）测试
+    # 非周期函数极端情况（极大极小）测试
     np.random.seed(10)
 
-    ini_position = [-0.5, 0.0]
-    angle = np.pi / 180 * 90
+    ini_position = [-0.01, 0.36]
+    angle = np.pi / 180 * 30
     ini_vector = [np.cos(angle), np.sin(angle)]
     PES = SimpleSurface()
     d = DimerQs(PES, 2, ini_position, ini_vector, whether_print=True)
@@ -690,11 +699,10 @@ def atest_extreme1():
     print('\n')
 
     x1 = d.position + d.vector * d.r
-    plt.plot(x1[0], x1[1], 'ko')  # 画出点1位置
 
 
 def atest_extreme():
-    # 极端情况（极大极小）测试
+    # 周期函数极端情况（极大极小）测试
     np.random.seed(7)
     ini_position1 = np.array([[-4.3, 1.6], [-np.pi / 2 * 1.1, -np.pi / 2]], 'f')
     for i in range(1, 3):
@@ -702,17 +710,17 @@ def atest_extreme():
         ini_position = ini_position1[i - 1]
         ini_vector = np.random.rand(2)
         PES = SimpleSurface()
-        d = Dimer(PES, 2, ini_position, ini_vector, whether_print=True)
-        position_d, times_d, f_r_list, f_parallel_list, c_list = d.work_list()  # 得到dimer运行轨迹和每一次的旋转数
+        d = DimerQs(PES, 2, ini_position, ini_vector, whether_print=True)
+        position_d, times_d, f_r_list, f_parallel_list, c_list = d.work_list(1)  # 得到dimer运行轨迹和每一次的旋转数
         d.PES.show_point_2d(position_d)
         d.PES.show_surface_2d(-5, 5)
         plt.title('Dimer rotates %d times and run %d times \n '
                   % (sum(times_d), len(times_d)))
         x1 = d.position + d.vector * d.r
-        plt.plot(x1[0], x1[1], 'ko')  # 画出点1位置
 
         plt.figure(2 * i + 1)
-        plt.plot(c_list)
+        plt.plot(f_r_list)
+        plt.title('The relation between |g0| and iterations')
         # plt.figure(2 * i + 2)
         # plt.plot(f_parallel_list)
         # plt.figure(2 * i + 3)

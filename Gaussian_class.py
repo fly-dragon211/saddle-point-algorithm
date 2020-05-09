@@ -444,7 +444,7 @@ def baker_test_dimer(baker_folder_path, result_folder_path, cal_method=0):
     mkdir(result_folder_path)
     cal_nums = []
     cal_time = []
-    for i in range(1, 21):
+    for i in range(1, 26):
         baker_path = baker_folder_path + str(i)
         result_path = result_folder_path + str(i)
         # 进入result/i文件夹，不存在则创建
@@ -464,9 +464,9 @@ def baker_test_dimer(baker_folder_path, result_folder_path, cal_method=0):
         cal_nums[-1].append(float(d.get_value(d.position)))  # 记录计算过渡态能量
         # 存储信息到 result.txt
         with open(result_folder_path+'run_result.txt', 'a+') as f:
+            g.cal_num[0] -= 2  # 多计算了两次能量
             f.write(str(i) + ' ' * 2 + 'Dimer rotates %d times, run %d times. %f second. E_final %f\n '
                     % (sum(times_d), len(times_d), cal_time[-1], d.get_value(d.position)))
-            g.cal_num[0] -= 1
             f.write('energy and gradient cal:' + str(g.cal_num) +
                     ' translate situation:' + str(d.translate_situation) + '\n'*2)
 
@@ -484,7 +484,7 @@ def baker_test_Newton():
     mkdir(result_folder_path)
     cal_nums = []
     cal_time = []
-    for i in range(1, 4):
+    for i in range(0, 4):
         baker_path = baker_folder_path + str(i)
         result_path = result_folder_path + str(i)
         # 进入result/i文件夹，不存在则创建
@@ -526,8 +526,9 @@ def my_test():
 
 if __name__ == '__main__':
     matrix_result = []
+    # 下面必须为绝对路径
     baker_folder = r'D:\graduate_project\transition_state\saddle-point-algorithm\baker_molcule' + '\\'
-    result_folder = r'D:\graduate_project\transition_state\result_3' + '\\'
+    result_folder = r'D:\graduate_project\transition_state\result_4' + '\\'
     for cal_method in range(0, 4):
         cal_nums = baker_test_dimer(baker_folder, result_folder, cal_method)
         cal_nums = np.array(cal_nums, dtype=np.float)
